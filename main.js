@@ -255,29 +255,46 @@ function getBudgetColor(percent) {
 }
 
 
+// main.js -> Reemplaza esta función
 function toggleCategoryDetails(cardElement) {
     const categoryName = cardElement.dataset.category;
     const container = cardElement.querySelector('.category-details-container');
-    cardElement.classList.toggle('is-open');
+    const isOpen = cardElement.classList.toggle('is-open');
 
-    if (cardElement.classList.contains('is-open')) {
+    if (isOpen) {
         const normalizedCategoryName = normalizeString(categoryName);
         const categoryExpenses = state.monthlyExpenses.filter(g => normalizeString(g.categoria) === normalizedCategoryName);
-        container.innerHTML = categoryExpenses.length === 0 
-            ? `<p class="text-center text-gray-500 text-sm pt-4">No hay gastos para esta categoría este mes.</p>`
-            : `<div class="mt-4 pt-4 border-t border-gray-200 space-y-2">` + 
-              categoryExpenses.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
-                <div class="flex items-center justify-between text-sm">
-                    <div>
-                        <p class="font-semibold text-gray-700">${gasto.detalle}</p>
-                        <p class="text-xs text-gray-400">${new Date(gasto.fecha).toLocaleDateString('es-ES')}</p>
-                    </div>
-                    <span class="font-medium text-gray-800">${(gasto.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                </div>`).join('') + `</div>`;
+
+        if (categoryExpenses.length === 0) {
+            container.innerHTML = `<p class="text-center text-gray-500 text-sm pt-4">No hay gastos para esta categoría este mes.</p>`;
+        } else {
+            const expensesHTML = categoryExpenses
+                .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+                .map(gasto => `
+                    <div class="flex items-center justify-between text-sm py-2 border-b border-gray-100 last:border-b-0">
+                        <div>
+                            <p class="font-semibold text-gray-700">${gasto.detalle}</p>
+                            <p class="text-xs text-gray-400">${new Date(gasto.fecha).toLocaleDateString('es-ES')}</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium text-gray-800">${(gasto.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                            <button class="edit-btn p-2 text-gray-400 hover:text-blue-600" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
+                            <button class="delete-btn p-2 text-gray-400 hover:text-red-600" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
+                        </div>
+                    </div>`
+                ).join('');
+
+            container.innerHTML = `<div class="mt-4 pt-2 border-t border-gray-200">${expensesHTML}</div>`;
+
+            // NUEVO: Añadimos los listeners a los botones recién creados
+            container.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+            container.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+        }
     } else {
         container.innerHTML = '';
     }
 }
+
 
 function updateLastUpdatedTime(actionInfo = '') {
     state.lastUpdated = new Date();
@@ -387,44 +404,117 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
-
-
-// main.js -> Reemplaza estas dos funciones
-
+// main.js -> Reemplaza esta función
 async function renderInformesView() {
-    // La vista ahora tendrá un contenedor para las "píldoras" de filtro
     renderViewShell('Informes', `
+        <div class="bg-white p-4 rounded-lg shadow mb-6">
+            <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
+            <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
+            <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
+        </div>
+
         <div class="bg-white p-4 rounded-lg shadow">
-            <h2 class="text-lg font-semibold text-gray-500 mb-3">Filtrar por Categoría</h2>
-            <div id="informes-filters" class="flex flex-wrap gap-2 mb-4">
-                </div>
-            <div class="h-80 mt-4">
-                <canvas id="history-chart"></canvas>
-                <div id="informes-placeholder" class="hidden h-full flex items-center justify-center text-gray-400">Cargando datos del gráfico...</div>
+            <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis de Gasto Mensual</h2>
+            <div class="mb-4">
+                <label for="month-selector" class="block text-sm font-medium text-gray-700">Seleccionar Mes:</label>
+                <select id="month-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+            </div>
+            <div id="monthly-pie-chart-container" class="h-80 mt-4 flex justify-center items-center text-gray-400">
+                Selecciona un mes para ver el análisis.
             </div>
         </div>
     `);
 
-    const placeholder = $('#informes-placeholder');
-    placeholder.classList.remove('hidden'); // Mostrar "cargando"
-
+    // Lógica para el gráfico de evolución (ya la tenemos)
     if (!state.history || state.history.length === 0) {
         try {
             const result = await apiService.call('getSheetData', { sheetName: 'HistorialGastos' });
-            if (result.status === 'success') {
-                state.history = result.data.processedData;
-            }
-        } catch (error) {
-            showToast('No se pudo cargar el historial.', 'error');
-            placeholder.textContent = 'Error al cargar los datos.';
-            return;
-        }
+            if (result.status === 'success') state.history = result.data.processedData;
+        } catch (error) { showToast('No se pudo cargar el historial.', 'error'); }
     }
-
-    placeholder.classList.add('hidden'); // Ocultar "cargando"
     populateInformesFilters();
-    updateHistoryChart(['Total']); // Mostramos el total por defecto
+    updateHistoryChart(['Total']);
+
+    // Nueva lógica para el selector de mes
+    populateMonthSelector();
+    $('#month-selector').addEventListener('change', handleMonthSelection);
 }
+
+// main.js -> Añade estas 3 nuevas funciones
+
+function populateMonthSelector() {
+    const selector = $('#month-selector');
+    if (!selector || !state.history || state.history.length === 0) return;
+
+    // Creamos una lista única de meses/años del historial
+    const uniqueMonths = [...new Set(state.history.map(item => `${item.ano}-${(new Date(Date.parse(item.mes +" 1, 2012")).getMonth()+1).toString().padStart(2, '0')}`))].sort().reverse();
+
+    selector.innerHTML = '<option value="">Selecciona...</option>';
+    uniqueMonths.forEach(monthStr => {
+        const [year, month] = monthStr.split('-');
+        const date = new Date(year, month - 1);
+        const optionText = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+        selector.innerHTML += `<option value="${year}-${month}">${optionText}</option>`;
+    });
+}
+
+async function handleMonthSelection(e) {
+    const [year, month] = e.target.value.split('-');
+    if (!year || !month) return;
+
+    const container = $('#monthly-pie-chart-container');
+    container.innerHTML = `<div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>`;
+
+    try {
+        const result = await apiService.getExpenses(year, month);
+        if (result.status === 'success' && result.data.length > 0) {
+            renderMonthlyPieChart(result.data);
+        } else {
+            container.innerHTML = 'No se encontraron gastos para este mes.';
+        }
+    } catch (error) {
+        container.innerHTML = 'Error al cargar los gastos.';
+        showToast('No se pudo cargar el detalle del mes.', 'error');
+    }
+}
+
+function renderMonthlyPieChart(expenses) {
+    const container = $('#monthly-pie-chart-container');
+    container.innerHTML = '<canvas id="monthly-pie-chart"></canvas>';
+
+    // Agrupamos los gastos por categoría
+    const categoryTotals = expenses.reduce((acc, expense) => {
+        const category = expense.categoria || 'Sin Categoría';
+        acc[category] = (acc[category] || 0) + expense.monto;
+        return acc;
+    }, {});
+
+    const labels = Object.keys(categoryTotals);
+    const data = Object.values(categoryTotals);
+
+    new Chart($('#monthly-pie-chart').getContext('2d'), {
+        type: 'doughnut', // 'doughnut' es una versión más moderna de 'pie'
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Gastos del Mes',
+                data: data,
+                backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#14b8a6', '#d946ef'],
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                }
+            }
+        }
+    });
+}
+
 
 function populateInformesFilters() {
     const filtersContainer = $('#informes-filters');
@@ -483,7 +573,63 @@ function updateHistoryChart() {
         const colors = ['#0284C7', '#DC2626', '#16A34A', '#F97316', '#7C3AED'];
         return { label: cat, data, borderColor: colors[index % colors.length], fill: false, tension: 0.1 };
     });
-    state.activeChart = new Chart($('#history-chart').getContext('2d'), { type: 'line', data: { labels, datasets }, options: { responsive: true, maintainAspectRatio: false } });
+
+    const ctx = $('#history-chart').getContext('2d');
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+    gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+
+    state.activeChart = new Chart(ctx, { 
+    type: 'line', 
+    data: { labels, datasets }, 
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        elements: {
+            line: {
+                tension: 0.4, // Suaviza las curvas de la línea
+                borderWidth: 2
+            },
+            point: {
+                radius: 3,
+                hitRadius: 10,
+                hoverRadius: 5
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                titleFont: { size: 14 },
+                bodyFont: { size: 12 },
+                padding: 10,
+                cornerRadius: 4,
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: '#e5e7eb' // Un color de rejilla más suave
+                }
+            },
+            x: {
+                grid: {
+                    display: false // Ocultamos la rejilla vertical para un look más limpio
+                }
+            }
+        }
+    } 
+    });
+
+    if (state.activeChart.data.datasets.length > 0) {
+    state.activeChart.data.datasets[0].fill = true;
+    state.activeChart.data.datasets[0].backgroundColor = gradient;
+    state.activeChart.update();
+    }    
 }
 
 function openModal() {
