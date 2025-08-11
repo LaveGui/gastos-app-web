@@ -94,30 +94,47 @@ function updateActiveNav(activeView) {
     });
 }
 
+// main.js -> Reemplaza esta función
 function setupGlobalEventListeners() {
     $('#fab-add-expense').addEventListener('click', () => openModal());
     $('#expense-modal').addEventListener('click', (e) => {
-        const cancelBtn = e.target.closest('#modal-cancel-button');
-        if (cancelBtn) closeModal();
+        if (e.target.id === 'modal-cancel-button') closeModal();
         const categoryBtn = e.target.closest('.category-btn');
         if (categoryBtn) handleCategorySelection(categoryBtn);
         const superBtn = e.target.closest('.super-btn');
         if (superBtn) handleSupermarketSelection(superBtn);
     });
     document.addEventListener('click', (e) => {
-    if (e.target.id === 'refresh-dashboard') {
-        refreshStateAndUI();
-    }
+        if (e.target.id === 'refresh-dashboard') {
+            refreshStateAndUI();
+        }
     });
-    let touchStartY = 0;
-    document.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY);
-    document.addEventListener('touchend', e => {
-    const touchEndY = e.changedTouches[0].clientY;
-    if (touchEndY - touchStartY > 100) { // Deslizó hacia abajo
-        refreshStateAndUI();
-    }
-});
 
+    // --- LÓGICA DE PULL-TO-REFRESH MEJORADA ---
+    let touchStartY = 0;
+    const appContent = $('#app-content');
+
+    appContent.addEventListener('touchstart', e => {
+        // Solo registramos el inicio si estamos en la parte superior de la página
+        if (appContent.scrollTop === 0) {
+            touchStartY = e.touches[0].clientY;
+        } else {
+            touchStartY = 0; // Reseteamos si no estamos en el top
+        }
+    }, { passive: true });
+
+    appContent.addEventListener('touchmove', e => {
+        const touchEndY = e.touches[0].clientY;
+        // Si el usuario desliza hacia abajo y empezamos desde el top
+        if (touchStartY > 0 && touchEndY - touchStartY > 100) {
+            // Prevenimos que el gesto se siga propagando
+            touchStartY = 0;
+
+            // Mostramos un loader y refrescamos
+            showLoader('Actualizando...');
+            refreshStateAndUI().then(() => hideLoader());
+        }
+    }, { passive: true });
 }
 
 function renderDashboardView() {
@@ -327,47 +344,7 @@ async function renderGastosView() {
     }
 }
 
-// main.js -> Reemplaza la función completa
-async function renderInformesView() {
-    // [CORREGIDO] Usamos renderViewShell desde el inicio para preparar la vista y mostrar el spinner.
-    // Esto evita el error al no encontrar 'informes-container', porque ahora dibujamos dentro de #app-content.
-    renderViewShell('Informes', `
-        <div class="bg-white p-4 rounded-lg shadow">
-            <h2 class="text-lg font-semibold text-gray-500 mb-2">Evolución de Gastos</h2>
-            <div id="informes-filters" class="relative mb-4"></div>
-            <div class="h-80 mt-4 flex justify-center items-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500" id="informes-loader"></div>
-                <canvas id="history-chart" class="hidden"></canvas>
-            </div>
-        </div>
-    `);
 
-    // Si no tenemos los datos del historial, los pedimos.
-    // Esta lógica se mantiene igual.
-    if (!state.history || state.history.length === 0) {
-        try {
-            const result = await apiService.call('getSheetData', { sheetName: 'HistorialGastos' });
-            if (result.status === 'success') {
-                state.history = result.data.processedData;
-            } else {
-                // Si la API falla, mostramos un error donde iría el gráfico.
-                $('#informes-loader').parentElement.innerHTML = '<p class="text-center text-red-500">No se pudo cargar el historial.</p>';
-                return;
-            }
-        } catch (error) {
-            showToast('No se pudo cargar el historial.', 'error');
-            $('#informes-loader').parentElement.innerHTML = '<p class="text-center text-red-500">Error de conexión.</p>';
-            return;
-        }
-    }
-
-    // Una vez tenemos los datos, ocultamos el spinner y mostramos el canvas.
-    $('#informes-loader')?.remove();
-    $('#history-chart')?.classList.remove('hidden');
-
-    populateInformesFilters();
-    updateHistoryChart();
-}
 
 function checkBudgetWarnings() {
     state.categories.forEach(cat => {
@@ -410,28 +387,84 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
+
+
+// main.js -> Reemplaza estas dos funciones
+
+async function renderInformesView() {
+    // La vista ahora tendrá un contenedor para las "píldoras" de filtro
+    renderViewShell('Informes', `
+        <div class="bg-white p-4 rounded-lg shadow">
+            <h2 class="text-lg font-semibold text-gray-500 mb-3">Filtrar por Categoría</h2>
+            <div id="informes-filters" class="flex flex-wrap gap-2 mb-4">
+                </div>
+            <div class="h-80 mt-4">
+                <canvas id="history-chart"></canvas>
+                <div id="informes-placeholder" class="hidden h-full flex items-center justify-center text-gray-400">Cargando datos del gráfico...</div>
+            </div>
+        </div>
+    `);
+
+    const placeholder = $('#informes-placeholder');
+    placeholder.classList.remove('hidden'); // Mostrar "cargando"
+
+    if (!state.history || state.history.length === 0) {
+        try {
+            const result = await apiService.call('getSheetData', { sheetName: 'HistorialGastos' });
+            if (result.status === 'success') {
+                state.history = result.data.processedData;
+            }
+        } catch (error) {
+            showToast('No se pudo cargar el historial.', 'error');
+            placeholder.textContent = 'Error al cargar los datos.';
+            return;
+        }
+    }
+
+    placeholder.classList.add('hidden'); // Ocultar "cargando"
+    populateInformesFilters();
+    updateHistoryChart(['Total']); // Mostramos el total por defecto
+}
+
 function populateInformesFilters() {
-    const uniqueCategories = [...new Set((state.history || []).map(item => item.categoria))].filter(Boolean);
     const filtersContainer = $('#informes-filters');
     if (!filtersContainer) return;
-    filtersContainer.innerHTML = `
-        <button id="informes-dropdown-btn" class="w-full bg-white border rounded-md p-2 flex justify-between items-center">
-            <span>Seleccionar categorías...</span>
-            <span>▼</span>
+
+    // [CORREGIDO] Lógica para evitar duplicados
+    const uniqueCategories = [...new Set((state.history || []).map(item => item.categoria))].filter(Boolean);
+    const allCategories = ['Total', ...uniqueCategories.filter(cat => cat.toLowerCase() !== 'total')];
+
+    filtersContainer.innerHTML = allCategories.map(cat => `
+        <button class="filter-chip px-3 py-1 border rounded-full text-sm transition" data-category="${cat}">
+            ${cat}
         </button>
-        <div id="informes-dropdown-panel" class="hidden absolute w-full bg-white border rounded-md mt-1 p-2 space-y-2 z-10">
-            <label class="flex items-center space-x-2"><input type="checkbox" class="h-4 w-4" name="informes-cat" value="Total" checked><span>Total</span></label>
-            ${uniqueCategories.map(cat => `<label class="flex items-center space-x-2"><input type="checkbox" class="h-4 w-4" name="informes-cat" value="${cat}"><span>${cat}</span></label>`).join('')}
-        </div>`;
-    $('#informes-dropdown-btn').addEventListener('click', () => $('#informes-dropdown-panel').classList.toggle('hidden'));
-    $$('input[name="informes-cat"]').forEach(checkbox => checkbox.addEventListener('change', () => {
-        const checkedCount = $$('input[name="informes-cat"]:checked').length;
-        if (checkedCount > 4) {
-            checkbox.checked = false;
-            showToast('Máximo 4 categorías.', 'error');
+    `).join('');
+
+    // Añadir listeners a los nuevos botones
+    filtersContainer.addEventListener('click', e => {
+        const chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+
+        // Permitir selección múltiple (o individual si lo prefieres)
+        chip.classList.toggle('is-active');
+        chip.classList.toggle('bg-blue-600', chip.classList.contains('is-active'));
+        chip.classList.toggle('text-white', chip.classList.contains('is-active'));
+
+        const selectedCategories = [...$$('.filter-chip.is-active')].map(c => c.dataset.category);
+
+        // Si no hay ninguno seleccionado, mostramos el total por defecto
+        if (selectedCategories.length === 0) {
+            updateHistoryChart(['Total']);
+            const totalChip = filtersContainer.querySelector('[data-category="Total"]');
+            if(totalChip) totalChip.classList.add('is-active', 'bg-blue-600', 'text-white');
+        } else {
+            updateHistoryChart(selectedCategories);
         }
-        updateHistoryChart();
-    }));
+    });
+
+    // Activar el chip de "Total" por defecto al cargar
+    const totalChip = filtersContainer.querySelector('[data-category="Total"]');
+    if(totalChip) totalChip.classList.add('is-active', 'bg-blue-600', 'text-white');
 }
 
 function updateHistoryChart() {
@@ -794,17 +827,32 @@ async function handleDeleteClick(e) {
     }
 }
 
+// main.js -> Reemplaza el objeto apiService completo por este
+
 const apiService = {
     getInitialData: () => fetch(`${API_URL}?action=getInitialData`).then(res => res.json()),
+    
     getExpenses: (year, month) => fetch(`${API_URL}?action=getExpenses&year=${year}&month=${month}`).then(res => res.json()),
+    
     call: (action, data) => {
+        // [MEJORA] Comprobamos la conexión antes de realizar la llamada
+        if (!navigator.onLine) {
+            showToast('Estás sin conexión. Inténtalo más tarde.', 'error');
+            // Devolvemos una promesa rechazada para que el .catch() que llama a la función se active
+            return Promise.reject(new Error('Offline'));
+        }
+
         return fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8', },
+            // El 'Content-Type' correcto para Apps Script es text/plain
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({ action, data }),
         }).then(response => {
             if (!response.ok) {
-                return response.json().then(errorBody => { throw new Error(errorBody.message || 'Error en la petición a la API'); });
+                // Si la API devuelve un error (ej: 400, 500), lo capturamos aquí
+                return response.json().then(errorBody => { 
+                    throw new Error(errorBody.message || 'Error en la petición a la API'); 
+                });
             }
             return response.json();
         });

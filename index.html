@@ -1,7 +1,7 @@
 <html lang="es" class="h-full bg-gray-100">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">    
     <title>Gastos App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -10,6 +10,20 @@
     <meta name="theme-color" content="#2563eb"/>
 
     <link rel="apple-touch-icon" href="./images/icon-192x192.png">
+    <style>
+        /* Ajuste para que el menú inferior no se pegue al borde en iPhones modernos */
+        footer {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Estilo para los botones de filtro activos en la página de Informes */
+        .filter-chip.is-active {
+            background-color: #2563eb; /* Corresponde a bg-blue-600 de Tailwind */
+            color: white;
+            border-color: #2563eb;
+        }
+    </style>
+
 </head>
 <body class="h-full">
     <div id="app-container" class="relative min-h-full pb-20">
