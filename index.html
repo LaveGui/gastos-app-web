@@ -6,6 +6,9 @@
     <title>Gastos App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb"/>
+    <link rel="apple-touch-icon" href="/images/icon-192x192.png">
 </head>
 <body class="h-full">
     <div id="app-container" class="relative min-h-full pb-20">
@@ -64,5 +67,14 @@
         <div id="toast-container" class="fixed top-5 right-5 z-50"></div>
     </div>
     <script src="main.js"></script>
+    <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(registration => console.log('ServiceWorker registrado con éxito:', registration.scope))
+        .catch(err => console.log('Fallo en el registro de ServiceWorker:', err));
+    });
+  }
+</script>
 </body>
 </html>
