@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbyCfGgp5Rht3e_krwhKflhiOAS2oS36-1x73OZAGdJPJXvoNlItS66jLaqCkjOHTxbc/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzo2iMc0kpgrY8p3tkXVS15ivS5T5_yAlkdWGxkzfRLuv-tWquZFSVGEVHE5zeVkvtE5g/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -557,79 +557,65 @@ function populateInformesFilters() {
     if(totalChip) totalChip.classList.add('is-active', 'bg-blue-600', 'text-white');
 }
 
-function updateHistoryChart() {
+// main.js -> Reemplaza esta función
+
+function updateHistoryChart(selectedCategories) {
     if (state.activeChart) state.activeChart.destroy();
     if (!document.getElementById('history-chart')) return;
+
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const historyData = (state.history || []).filter(d => d.mes && d.ano && !isNaN(d.gasto)).sort((a,b) => (a.ano * 100 + meses.indexOf(a.mes)) - (b.ano * 100 + meses.indexOf(b.mes)));
+
+    const historyData = (state.history || []).filter(d => d.mes && d.ano && !isNaN(d.gasto))
+        .sort((a,b) => (a.ano * 100 + meses.indexOf(a.mes)) - (b.ano * 100 + meses.indexOf(b.mes)));
+
     const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
-    const selectedCategories = [...$$('input[name="informes-cat"]:checked')].map(cb => cb.value);
+
     const datasets = selectedCategories.map((cat, index) => {
         const data = labels.map(label => {
             const [mes, ano] = label.split(' ');
-            const relevantEntries = historyData.filter(d => d.ano == ano && d.mes.startsWith(mes) && (normalizeString(d.categoria) === normalizeString(cat)));
+
+            // [CORREGIDO] Lógica para calcular el total o filtrar por categoría
+            const relevantEntries = historyData.filter(d => {
+                const monthMatch = d.mes.startsWith(mes);
+                const yearMatch = d.ano == ano;
+
+                // Si la categoría es "Total", sumamos todo. Si no, filtramos por esa categoría.
+                if (normalizeString(cat) === 'total') {
+                    return yearMatch && monthMatch;
+                }
+                return yearMatch && monthMatch && (normalizeString(d.categoria) === normalizeString(cat));
+            });
+
             return relevantEntries.reduce((sum, entry) => sum + (entry.gasto || 0), 0);
         });
+
         const colors = ['#0284C7', '#DC2626', '#16A34A', '#F97316', '#7C3AED'];
         return { label: cat, data, borderColor: colors[index % colors.length], fill: false, tension: 0.1 };
     });
 
+    // Mantenemos el código de renderizado del gráfico que ya tenías
     const ctx = $('#history-chart').getContext('2d');
-
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
     gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
 
     state.activeChart = new Chart(ctx, { 
-    type: 'line', 
-    data: { labels, datasets }, 
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        elements: {
-            line: {
-                tension: 0.4, // Suaviza las curvas de la línea
-                borderWidth: 2
-            },
-            point: {
-                radius: 3,
-                hitRadius: 10,
-                hoverRadius: 5
-            }
-        },
-        plugins: {
-            legend: {
-                position: 'top',
-            },
-            tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                titleFont: { size: 14 },
-                bodyFont: { size: 12 },
-                padding: 10,
-                cornerRadius: 4,
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                grid: {
-                    color: '#e5e7eb' // Un color de rejilla más suave
-                }
-            },
-            x: {
-                grid: {
-                    display: false // Ocultamos la rejilla vertical para un look más limpio
-                }
-            }
-        }
-    } 
+        type: 'line', 
+        data: { labels, datasets }, 
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            elements: { line: { tension: 0.4, borderWidth: 2 }, point: { radius: 3, hitRadius: 10, hoverRadius: 5 } },
+            plugins: { legend: { position: 'top' }, tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.7)', titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, } },
+            scales: { y: { beginAtZero: true, grid: { color: '#e5e7eb' } }, x: { grid: { display: false } } }
+        } 
     });
 
     if (state.activeChart.data.datasets.length > 0) {
-    state.activeChart.data.datasets[0].fill = true;
-    state.activeChart.data.datasets[0].backgroundColor = gradient;
-    state.activeChart.update();
-    }    
+        state.activeChart.data.datasets[0].fill = true;
+        state.activeChart.data.datasets[0].backgroundColor = gradient;
+        state.activeChart.update();
+    }
 }
 
 function openModal() {
