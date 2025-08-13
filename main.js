@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzo2iMc0kpgrY8p3tkXVS15ivS5T5_yAlkdWGxkzfRLuv-tWquZFSVGEVHE5zeVkvtE5g/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxRcni4yimOSiabV1nb270KUAF38xCxoRN2N7Th8vU3DNlY1E9ZJN4cn5BEZktfqvrFtQ/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -404,7 +404,7 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
-// main.js -> Reemplaza esta función
+
 async function renderInformesView() {
     renderViewShell('Informes', `
         <div class="bg-white p-4 rounded-lg shadow mb-6">
@@ -414,18 +414,18 @@ async function renderInformesView() {
         </div>
 
         <div class="bg-white p-4 rounded-lg shadow">
-            <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis de Gasto Mensual</h2>
+            <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
             <div class="mb-4">
                 <label for="month-selector" class="block text-sm font-medium text-gray-700">Seleccionar Mes:</label>
                 <select id="month-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
             </div>
-            <div id="monthly-pie-chart-container" class="h-80 mt-4 flex justify-center items-center text-gray-400">
-                Selecciona un mes para ver el análisis.
+            <div id="monthly-analysis-content" class="mt-4">
+                <p class="text-center text-gray-400 py-8">Selecciona un mes para ver el análisis.</p>
             </div>
         </div>
     `);
 
-    // Lógica para el gráfico de evolución (ya la tenemos)
+    // Lógica para el gráfico de evolución (no cambia)
     if (!state.history || state.history.length === 0) {
         try {
             const result = await apiService.call('getSheetData', { sheetName: 'HistorialGastos' });
@@ -438,6 +438,14 @@ async function renderInformesView() {
     // Nueva lógica para el selector de mes
     populateMonthSelector();
     $('#month-selector').addEventListener('change', handleMonthSelection);
+    
+    // Listener para los detalles de categoría en el nuevo informe
+    $('#monthly-analysis-content').addEventListener('click', (e) => {
+        const categoryItem = e.target.closest('.report-category-item');
+        if (categoryItem) {
+            handleReportCategoryClick(categoryItem);
+        }
+    });
 }
 
 // main.js -> Añade estas 3 nuevas funciones
@@ -458,62 +466,148 @@ function populateMonthSelector() {
     });
 }
 
-async function handleMonthSelection(e) {
-    const [year, month] = e.target.value.split('-');
-    if (!year || !month) return;
 
-    const container = $('#monthly-pie-chart-container');
-    container.innerHTML = `<div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>`;
+// main.js -> REEMPLAZA esta función
+async function handleMonthSelection(e) {
+    const value = e.target.value;
+    const container = $('#monthly-analysis-content');
+
+    if (!value) {
+        container.innerHTML = '<p class="text-center text-gray-400 py-8">Selecciona un mes para ver el análisis.</p>';
+        return;
+    }
+
+    const [year, month] = value.split('-');
+    container.innerHTML = `<div class="h-48 flex justify-center items-center"><div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div></div>`;
 
     try {
-        const result = await apiService.getExpenses(year, month);
-        if (result.status === 'success' && result.data.length > 0) {
-            renderMonthlyPieChart(result.data);
+        const result = await apiService.call('getMonthlyAnalysis', { year, month });
+        if (result.status === 'success') {
+            renderMonthlyAnalysisReport(result.data, year, month); // Pasamos year y month para futuras acciones
         } else {
-            container.innerHTML = 'No se encontraron gastos para este mes.';
+            container.innerHTML = `<p class="text-center text-red-500 py-8">${result.message || 'No se encontraron datos para este mes.'}</p>`;
         }
     } catch (error) {
-        container.innerHTML = 'Error al cargar los gastos.';
-        showToast('No se pudo cargar el detalle del mes.', 'error');
+        container.innerHTML = `<p class="text-center text-red-500 py-8">Error al cargar el análisis.</p>`;
+        showToast('No se pudo cargar el análisis del mes.', 'error');
     }
 }
 
-function renderMonthlyPieChart(expenses) {
-    const container = $('#monthly-pie-chart-container');
-    container.innerHTML = '<canvas id="monthly-pie-chart"></canvas>';
+// main.js -> AÑADE estas 2 nuevas funciones
 
-    // Agrupamos los gastos por categoría
-    const categoryTotals = expenses.reduce((acc, expense) => {
-        const category = expense.categoria || 'Sin Categoría';
-        acc[category] = (acc[category] || 0) + expense.monto;
-        return acc;
-    }, {});
+function renderMonthlyAnalysisReport(data, year, month) {
+    const container = $('#monthly-analysis-content');
+    const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
-    const labels = Object.keys(categoryTotals);
-    const data = Object.values(categoryTotals);
+    // 1. El Gran Titular
+    const netResultColor = data.summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
+    const netResultText = data.summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(data.summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(data.summary.netResult))}`;
+    
+    const summaryHTML = `
+        <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center">
+            <p class="text-lg font-semibold ${netResultColor}">${netResultText}</p>
+            <p class="text-sm text-gray-600">Gastaste ${formatCurrency(data.summary.totalSpent)} de un presupuesto de ${formatCurrency(data.summary.totalBudget)}</p>
+        </div>
+    `;
 
-    new Chart($('#monthly-pie-chart').getContext('2d'), {
-        type: 'doughnut', // 'doughnut' es una versión más moderna de 'pie'
+    // 2. Gráfico y Análisis de Categorías (Diseño apilado para móviles)
+    const categoryAnalysisHTML = data.categoryAnalysis.map(cat => {
+        let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
+        if (cat.variationStatus === 'aumento') {
+            variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${cat.variationPercent.toFixed(1)}%</span>`;
+        } else if (cat.variationStatus === 'descenso') {
+            variationHTML = `<span class="text-sm font-semibold text-green-600">▼ ${cat.variationPercent.toFixed(1)}%</span>`;
+        }
+        return `
+            <div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}" data-year="${year}" data-month="${month}">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '💰'}</span>
+                        <div>
+                            <p class="font-bold text-gray-800">${cat.category}</p>
+                            <p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>
+                        ${variationHTML}
+                    </div>
+                </div>
+                <div class="category-expense-details mt-2 pl-8" style="display: none;"></div>
+            </div>
+        `;
+    }).join('');
+
+    // 3. Sabías que...
+    const funFacts = data.behavioralAnalysis;
+    const funFactsHTML = `
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6">
+            <h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4>
+            <ul class="list-disc list-inside text-sm text-blue-700 space-y-1">
+                ${funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : ''}
+                ${funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos).</li>` : ''}
+                ${funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : ''}
+                ${funFacts.activityFrequency.map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('')}
+            </ul>
+        </div>
+    `;
+
+    container.innerHTML = `
+        ${summaryHTML}
+        <div class="md:grid md:grid-cols-2 md:gap-6">
+            <div class="h-80 mb-6 md:mb-0"><canvas id="monthly-doughnut-chart"></canvas></div>
+            <div>${categoryAnalysisHTML}</div>
+        </div>
+        ${funFactsHTML}
+    `;
+    
+    // Renderizar el gráfico de dona
+    new Chart($('#monthly-doughnut-chart').getContext('2d'), {
+        type: 'doughnut',
         data: {
-            labels: labels,
+            labels: data.categoryAnalysis.map(c => c.category),
             datasets: [{
-                label: 'Gastos del Mes',
-                data: data,
+                data: data.categoryAnalysis.map(c => c.currentAmount),
                 backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#8b5cf6', '#eab308', '#14b8a6', '#d946ef'],
                 hoverOffset: 4
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                }
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 }
+
+async function handleReportCategoryClick(categoryItem) {
+    const detailsContainer = categoryItem.querySelector('.category-expense-details');
+    const category = categoryItem.dataset.category;
+    const year = categoryItem.dataset.year;
+    const month = categoryItem.dataset.month;
+    const isOpen = detailsContainer.style.display !== 'none';
+
+    if (isOpen) {
+        detailsContainer.style.display = 'none';
+        detailsContainer.innerHTML = '';
+    } else {
+        detailsContainer.style.display = 'block';
+        detailsContainer.innerHTML = `<p class="text-sm text-gray-400 animate-pulse">Cargando detalles...</p>`;
+        
+        try {
+            const result = await apiService.getExpenses(year, month);
+            if (result.status === 'success') {
+                const expenses = result.data.filter(g => g.categoria === category);
+                const expensesHTML = expenses.map(g => `
+                    <div class="flex justify-between text-xs py-1 border-t border-gray-200">
+                        <span>${g.detalle} (${new Date(g.fecha).toLocaleDateString('es-ES')})</span>
+                        <span class="font-medium">${(g.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                    </div>
+                `).join('');
+                detailsContainer.innerHTML = expensesHTML || '<p class="text-sm text-gray-400">No hay detalles de gastos.</p>';
+            }
+        } catch(e) {
+            detailsContainer.innerHTML = `<p class="text-sm text-red-500">No se pudieron cargar los detalles.</p>`;
+        }
+    }
+}
+
 
 
 function populateInformesFilters() {
