@@ -493,7 +493,7 @@ async function handleMonthSelection(e) {
     }
 }
 
-// main.js -> AÑADE estas 2 nuevas funciones
+// main.js -> REEMPLAZA esta función por completo
 
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
@@ -510,7 +510,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
         </div>
     `;
 
-    // 2. Gráfico y Análisis de Categorías (Diseño apilado para móviles)
+    // 2. Gráfico y Análisis de Categorías
     const categoryAnalysisHTML = data.categoryAnalysis.map(cat => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
         if (cat.variationStatus === 'aumento') {
@@ -539,8 +539,9 @@ function renderMonthlyAnalysisReport(data, year, month) {
     }).join('');
 
     // 3. Sabías que...
-    const funFacts = data.behavioralAnalysis;
-    const funFactsHTML = `
+    // [CORREGIDO] Cambiamos 'behavioralAnalysis' por 'funFacts' para que coincida con la API
+    const funFacts = data.funFacts; 
+    const funFactsHTML = funFacts ? `
         <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6">
             <h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4>
             <ul class="list-disc list-inside text-sm text-blue-700 space-y-1">
@@ -550,7 +551,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
                 ${funFacts.activityFrequency.map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('')}
             </ul>
         </div>
-    `;
+    ` : '';
 
     container.innerHTML = `
         ${summaryHTML}
