@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbxm5FQaP8qvgeukmVU2DDVXUhQ2QpKDop9TQoy_ExFxaPyqB2dp9qdVZ-lijY4jVbhcuA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzSJAnaiYXp4M9HWq-eRZg02TX4BjUPm4JwdpVYrlUxz8jhFM83-ZgSsj05dBux5sud-g/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -494,13 +494,16 @@ async function handleMonthSelection(e) {
 }
 // main.js -> REEMPLAZA esta función por la versión final
 
+// main.js -> REEMPLAZA esta función por la versión final
+
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
     container.expenseDetails = data.expenseDetails || [];
     
     const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280'];
 
-    // 1. El Gran Titular (ya con las mejoras anteriores)
+    // --- 1. Titular y Resumen ---
     const summary = data.summary;
     const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
@@ -513,11 +516,10 @@ function renderMonthlyAnalysisReport(data, year, month) {
         </div>
     `;
 
-    // 2. Análisis de Categorías (se mantiene la estructura, los datos ahora vendrán agrupados)
-    const categoryAnalysisHTML = data.categoryAnalysis.map(cat => {
+    // --- 2. Lista completa de categorías (que ahora actúa como leyenda) ---
+    const categoryAnalysisHTML = data.categoryAnalysis.map((cat, index) => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
-        // No mostramos variación para "Otros"
-        if (!cat.isOther && cat.variationStatus) {
+        if (cat.variationStatus) {
              if (cat.variationStatus === 'aumento') {
                 variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${cat.variationPercent.toFixed(1)}%</span>`;
             } else if (cat.variationStatus === 'descenso') {
@@ -528,7 +530,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
             <div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}" data-year="${year}" data-month="${month}">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center">
-                        <span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span>
+                        <span class="w-3 h-3 rounded-full mr-3" style="background-color: ${CHART_COLORS[index] || CHART_COLORS[5]}"></span>
                         <div>
                             <p class="font-bold text-gray-800">${cat.category}</p>
                             <p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>
@@ -544,14 +546,14 @@ function renderMonthlyAnalysisReport(data, year, month) {
         `;
     }).join('');
 
-    // 3. [Punto 4] "Sabías que..." reordenado y con más detalles
+    // --- 3. "Sabías que..." reordenado y con detalles corregidos ---
     const funFacts = data.funFacts;
     let funFactsHTML = '';
     if (funFacts) {
         const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : '';
         const activityFacts = funFacts.activityFrequency.map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('');
         const mostActiveDayFact = funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos). Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${funFacts.mostActiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
-        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto (sin fijos) fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}. Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${funFacts.mostExpensiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
+        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}. Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${funFacts.mostExpensiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
 
         funFactsHTML = `
             <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6">
@@ -566,16 +568,18 @@ function renderMonthlyAnalysisReport(data, year, month) {
         `;
     }
 
+    // --- 4. Ensamblaje Final de la Interfaz ---
     container.innerHTML = `
         ${summaryHTML}
         <div class="h-64 mb-4"><canvas id="monthly-doughnut-chart"></canvas></div>
-        <div id="custom-legend-container" class="space-y-3">${categoryAnalysisHTML}</div>
+        <h4 class="font-bold text-gray-700 mb-2">Desglose de Gastos</h4>
+        <div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div>
         ${funFactsHTML}
     `;
     
-    // 4. [Punto 1] Renderizar el nuevo gráfico "Top 4 + Otros"
-    const totalSpentForChart = data.summary.totalSpent;
-    const chartData = data.categoryAnalysis;
+    // --- 5. Renderizado del Gráfico con datos "Top 4 + Otros" ---
+    const chartData = data.chartData;
+    const totalSpentForChart = chartData.reduce((sum, item) => sum + item.currentAmount, 0);
     
     new Chart($('#monthly-doughnut-chart').getContext('2d'), {
         type: 'doughnut',
@@ -583,25 +587,21 @@ function renderMonthlyAnalysisReport(data, year, month) {
             labels: chartData.map(c => c.category),
             datasets: [{
                 data: chartData.map(c => c.currentAmount),
-                backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#eab308', '#14b8a6', '#d946ef'],
+                backgroundColor: CHART_COLORS,
                 borderColor: '#fff',
                 borderWidth: 2,
                 hoverOffset: 4
             }]
         },
         options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            cutout: '60%',
+            responsive: true, maintainAspectRatio: false, cutout: '60%',
             plugins: { 
-                // Eliminamos la leyenda automática
                 legend: { display: false },
-                // Configuramos los porcentajes sobre el gráfico
                 datalabels: {
                     formatter: (value, ctx) => {
+                        if (totalSpentForChart === 0) return '0%';
                         const percentage = (value / totalSpentForChart * 100);
-                        // Solo mostramos el % si es significativo (ej. > 4%)
-                        return percentage > 4 ? percentage.toFixed(0) + '%' : '';
+                        return percentage > 5 ? percentage.toFixed(0) + '%' : '';
                     },
                     color: '#fff',
                     font: { weight: 'bold', size: 14 }
