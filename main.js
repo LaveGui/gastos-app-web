@@ -404,6 +404,7 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
+// main.js -> REEMPLAZA esta función por completo
 
 async function renderInformesView() {
     renderViewShell('Informes', `
@@ -435,20 +436,32 @@ async function renderInformesView() {
     populateInformesFilters();
     updateHistoryChart(['Total']);
 
-    // Nueva lógica para el selector de mes
+    // Lógica para el selector de mes
     populateMonthSelector();
     $('#month-selector').addEventListener('change', handleMonthSelection);
     
-    // Listener para los detalles de categoría en el nuevo informe
-    $('#monthly-analysis-content').addEventListener('click', (e) => {
+    // [CORREGIDO] Usamos un único listener en un elemento padre estable para todas las acciones
+    const appContent = document.getElementById('app-content');
+    
+    // Truco para limpiar listeners antiguos y evitar que se acumulen
+    const newAppContent = appContent.cloneNode(true);
+    appContent.parentNode.replaceChild(newAppContent, appContent);
+
+    newAppContent.addEventListener('click', (e) => {
         const categoryItem = e.target.closest('.report-category-item');
         if (categoryItem) {
             handleReportCategoryClick(categoryItem);
+            return;
+        }
+
+        const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
+        if (forgottenBtn) {
+            const { year, month } = forgottenBtn.dataset;
+            openModal(new Date(year, month - 1, 15));
+            return;
         }
     });
 }
-
-// main.js -> Añade estas 3 nuevas funciones
 
 function populateMonthSelector() {
     const selector = $('#month-selector');
@@ -493,7 +506,7 @@ async function handleMonthSelection(e) {
     }
 }
 
-// main.js -> REEMPLAZA esta función por la versión final
+// main.js -> REEMPLAZA esta función por completo
 
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
@@ -508,7 +521,8 @@ function renderMonthlyAnalysisReport(data, year, month) {
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
     const netResultPercent = summary.totalBudget > 0 ? `(${(Math.abs(summary.netResult) / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
     const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-6 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p></div>`;
-        // --- Botón para Añadir Gasto Olvidado ---
+
+    // --- Botón para Añadir Gasto Olvidado ---
     const addExpenseButtonHTML = `
         <div class="my-4 text-center">
             <button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-200 transition">
@@ -517,13 +531,6 @@ function renderMonthlyAnalysisReport(data, year, month) {
         </div>
     `;
 
-    // --- Ensamblaje Final en el orden correcto ---
-    container.innerHTML = `
-        ${summaryHTML}
-        ${addExpenseButtonHTML}  // <-- AÑADIMOS EL BOTÓN AQUÍ
-        <div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>
-        // ... el resto del código ...
-    `;
     // --- Componente 2: Desglose de "Otros" ---
     let othersHTML = '';
     if (data.othersBreakdown && data.othersBreakdown.length > 0) {
@@ -544,7 +551,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
             </div>`;
     }
 
-    // --- Componente 3: "Sabías que..." Reordenado ---
+    // --- Componente 3: "Sabías que..." ---
     const funFacts = data.funFacts;
     let funFactsHTML = '';
     if (funFacts) {
@@ -566,7 +573,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
         `;
     }
 
-    // --- Componente 4: Lista completa y detallada de categorías ---
+    // --- Componente 4: Lista completa de categorías ---
     const categoryAnalysisHTML = data.categoryAnalysis.map((cat) => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
         if (cat.variationStatus) {
@@ -589,6 +596,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
     // --- Ensamblaje Final en el orden correcto ---
     container.innerHTML = `
         ${summaryHTML}
+        ${addExpenseButtonHTML}
         <div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>
         ${othersHTML}
         ${funFactsHTML}
@@ -622,7 +630,6 @@ function renderMonthlyAnalysisReport(data, year, month) {
     });
 }
 
-// main.js -> REEMPLAZA esta función
 async function handleReportCategoryClick(categoryItem) {
     const detailsContainer = categoryItem.querySelector('.category-expense-details');
     const category = categoryItem.dataset.category;
@@ -867,7 +874,8 @@ function handleSupermarketSelection(button) {
     }
 }
 
-// main.js -> Reemplaza la función completa
+// main.js -> REEMPLAZA esta función por completo
+
 async function handleFormSubmit(e) {
     e.preventDefault();
     if (!state.selectedCategory) { showToast('Selecciona una categoría.', 'error'); return; }
@@ -883,6 +891,7 @@ async function handleFormSubmit(e) {
         detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
+
     const defaultDate = form.dataset.defaultDate;
     if (defaultDate) {
         data.fecha = defaultDate;
@@ -892,23 +901,25 @@ async function handleFormSubmit(e) {
     showLoader('Añadiendo gasto...');
 
     try {
-        // Llama a la API correcta dependiendo del caso
         const action = defaultDate ? 'addHistoricalExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
-        // Llamamos a la función de actualización con TODOS los datos necesarios
-        updateStateAfterAddExpense(result.data.receipt, result.data.budgetInfo, result.data.totalBudgetInfo);
-
-        // El toast de confirmación ahora usará los datos correctos
-        showConfirmationToast(result.data.receipt, result.data.budgetInfo);
-
+        if (action === 'addExpense' && result.data.receipt) {
+            updateStateAfterAddExpense(result.data.receipt, result.data.budgetInfo, result.data.totalBudgetInfo);
+            showConfirmationToast(result.data.receipt, result.data.budgetInfo);
+        } else {
+            showToast(result.data.message || "Acción completada", 'success');
+            // Forzamos la recarga del informe para ver el nuevo gasto reflejado
+            const monthSelector = $('#month-selector');
+            if (monthSelector) {
+                 monthSelector.dispatchEvent(new Event('change'));
+            }
+        }
     } catch (error) { 
         showToast(error.message, 'error'); 
-        
     } finally {
-    hideLoader();
+        hideLoader();
     }
-
 }
 
 function updateStateAfterAddExpense(receipt, budgetInfo, totalBudgetInfo) {
