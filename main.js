@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbxRcni4yimOSiabV1nb270KUAF38xCxoRN2N7Th8vU3DNlY1E9ZJN4cn5BEZktfqvrFtQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwbFhVAzNaESg7AnAaPxBW89SOilLS8TEoF9O8jXe1IHYKuWukXD3oWHGJlNGATZjLe/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -493,24 +493,28 @@ async function handleMonthSelection(e) {
     }
 }
 
-// main.js -> REEMPLAZA esta función por completo
-
+// main.js -> REEMPLAZA esta función
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
+    // Guardamos los detalles de los gastos para un acceso instantáneo más tarde [Punto 4]
+    container.expenseDetails = data.expenseDetails || [];
+    
     const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
-    // 1. El Gran Titular
-    const netResultColor = data.summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
-    const netResultText = data.summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(data.summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(data.summary.netResult))}`;
-    
+    // [Punto 1 y 2] Usamos el budget histórico y calculamos el % de ahorro/exceso
+    const summary = data.summary;
+    const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
+    const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
+    const netResultPercent = summary.totalBudget > 0 ? `(${(Math.abs(summary.netResult) / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
+
     const summaryHTML = `
         <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center">
             <p class="text-lg font-semibold ${netResultColor}">${netResultText}</p>
-            <p class="text-sm text-gray-600">Gastaste ${formatCurrency(data.summary.totalSpent)} de un presupuesto de ${formatCurrency(data.summary.totalBudget)}</p>
+            <p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p>
         </div>
     `;
 
-    // 2. Gráfico y Análisis de Categorías
+    // Análisis de Categorías (preparado para ser interactivo)
     const categoryAnalysisHTML = data.categoryAnalysis.map(cat => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
         if (cat.variationStatus === 'aumento') {
@@ -533,19 +537,18 @@ function renderMonthlyAnalysisReport(data, year, month) {
                         ${variationHTML}
                     </div>
                 </div>
-                <div class="category-expense-details mt-2 pl-8" style="display: none;"></div>
+                <div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div>
             </div>
         `;
     }).join('');
 
-    // 3. Sabías que...
-    // [CORREGIDO] Cambiamos 'behavioralAnalysis' por 'funFacts' para que coincida con la API
-    const funFacts = data.funFacts; 
+    // [Punto 5] "Sabías que..." con más detalles y exclusiones aplicadas
+    const funFacts = data.funFacts;
     const funFactsHTML = funFacts ? `
         <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6">
             <h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4>
-            <ul class="list-disc list-inside text-sm text-blue-700 space-y-1">
-                ${funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : ''}
+            <ul class="list-disc list-inside text-sm text-blue-700 space-y-2">
+                ${funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto (sin contar gastos fijos) fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong>. Detalle: <ul class="list-['-_'] list-inside ml-4">${funFacts.mostExpensiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : ''}
                 ${funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos).</li>` : ''}
                 ${funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : ''}
                 ${funFacts.activityFrequency.map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('')}
@@ -562,7 +565,8 @@ function renderMonthlyAnalysisReport(data, year, month) {
         ${funFactsHTML}
     `;
     
-    // Renderizar el gráfico de dona
+    // [Punto 3] Renderizar el gráfico de dona CON porcentajes
+    const totalSpentForChart = data.summary.totalSpent;
     new Chart($('#monthly-doughnut-chart').getContext('2d'), {
         type: 'doughnut',
         data: {
@@ -573,15 +577,30 @@ function renderMonthlyAnalysisReport(data, year, month) {
                 hoverOffset: 4
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { position: 'bottom' },
+                // Configuración para mostrar los % sobre el gráfico
+                datalabels: {
+                    formatter: (value, ctx) => {
+                        const percentage = (value / totalSpentForChart * 100).toFixed(1) + '%';
+                        return percentage;
+                    },
+                    color: '#fff',
+                    font: { weight: 'bold' }
+                }
+            } 
+        },
+        plugins: [ChartDataLabels] // Registrar el plugin
     });
 }
 
+// main.js -> REEMPLAZA esta función
 async function handleReportCategoryClick(categoryItem) {
     const detailsContainer = categoryItem.querySelector('.category-expense-details');
     const category = categoryItem.dataset.category;
-    const year = categoryItem.dataset.year;
-    const month = categoryItem.dataset.month;
     const isOpen = detailsContainer.style.display !== 'none';
 
     if (isOpen) {
@@ -589,23 +608,19 @@ async function handleReportCategoryClick(categoryItem) {
         detailsContainer.innerHTML = '';
     } else {
         detailsContainer.style.display = 'block';
-        detailsContainer.innerHTML = `<p class="text-sm text-gray-400 animate-pulse">Cargando detalles...</p>`;
         
-        try {
-            const result = await apiService.getExpenses(year, month);
-            if (result.status === 'success') {
-                const expenses = result.data.filter(g => g.categoria === category);
-                const expensesHTML = expenses.map(g => `
-                    <div class="flex justify-between text-xs py-1 border-t border-gray-200">
-                        <span>${g.detalle} (${new Date(g.fecha).toLocaleDateString('es-ES')})</span>
-                        <span class="font-medium">${(g.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                    </div>
-                `).join('');
-                detailsContainer.innerHTML = expensesHTML || '<p class="text-sm text-gray-400">No hay detalles de gastos.</p>';
-            }
-        } catch(e) {
-            detailsContainer.innerHTML = `<p class="text-sm text-red-500">No se pudieron cargar los detalles.</p>`;
-        }
+        // [Punto 4] Obtenemos los gastos del contenedor padre, sin llamada a la API
+        const allExpenses = document.getElementById('monthly-analysis-content').expenseDetails || [];
+        const expenses = allExpenses.filter(g => g.categoria === category);
+        
+        const expensesHTML = expenses.map(g => `
+            <div class="flex justify-between text-xs py-1 border-t border-gray-200 first:border-t-0">
+                <span>${g.detalle} (${new Date(g.fecha).toLocaleDateString('es-ES')})</span>
+                <span class="font-medium">${(g.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+            </div>
+        `).join('');
+        
+        detailsContainer.innerHTML = expensesHTML || '<p class="text-sm text-gray-400">No hay detalles de gastos.</p>';
     }
 }
 
