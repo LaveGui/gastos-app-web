@@ -405,20 +405,19 @@ function renderViewShell(title, content) {
 }
 
 // main.js -> REEMPLAZA esta función por completo
-
 async function renderInformesView() {
+    // 1. Dibuja el esqueleto de la página
     renderViewShell('Informes', `
         <div class="bg-white p-4 rounded-lg shadow mb-6">
             <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
             <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
             <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
         </div>
-
         <div class="bg-white p-4 rounded-lg shadow">
             <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
             <div class="mb-4">
                 <label for="month-selector" class="block text-sm font-medium text-gray-700">Seleccionar Mes:</label>
-                <select id="month-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"></select>
+                <select id="month-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
             </div>
             <div id="monthly-analysis-content" class="mt-4">
                 <p class="text-center text-gray-400 py-8">Selecciona un mes para ver el análisis.</p>
@@ -426,39 +425,41 @@ async function renderInformesView() {
         </div>
     `);
 
-    // Lógica para el gráfico de evolución (no cambia)
-    if (!state.history || state.history.length === 0) {
-        try {
+    // 2. Espera a tener los datos del historial ANTES de continuar
+    try {
+        if (!state.history || state.history.length === 0) {
+            showLoader('Cargando historial...');
             const result = await apiService.call('getSheetData', { sheetName: 'HistorialGastos' });
-            if (result.status === 'success') state.history = result.data.processedData;
-        } catch (error) { showToast('No se pudo cargar el historial.', 'error'); }
+            if (result.status === 'success') {
+                state.history = result.data.processedData;
+            }
+        }
+    } catch (error) {
+        showToast('No se pudo cargar el historial.', 'error');
+    } finally {
+        hideLoader();
     }
+
+    // 3. Ahora que estamos seguros de tener los datos, dibujamos los componentes
     populateInformesFilters();
     updateHistoryChart(['Total']);
-
-    // Lógica para el selector de mes
     populateMonthSelector();
+
+    // 4. Añadimos los listeners de eventos
     $('#month-selector').addEventListener('change', handleMonthSelection);
-    
-    // [CORREGIDO] Usamos un único listener en un elemento padre estable para todas las acciones
+
     const appContent = document.getElementById('app-content');
-    
-    // Truco para limpiar listeners antiguos y evitar que se acumulen
     const newAppContent = appContent.cloneNode(true);
     appContent.parentNode.replaceChild(newAppContent, appContent);
 
     newAppContent.addEventListener('click', (e) => {
         const categoryItem = e.target.closest('.report-category-item');
-        if (categoryItem) {
-            handleReportCategoryClick(categoryItem);
-            return;
-        }
+        if (categoryItem) handleReportCategoryClick(categoryItem);
 
         const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
         if (forgottenBtn) {
             const { year, month } = forgottenBtn.dataset;
             openModal(new Date(year, month - 1, 15));
-            return;
         }
     });
 }
@@ -506,32 +507,23 @@ async function handleMonthSelection(e) {
     }
 }
 
-// main.js -> REEMPLAZA esta función por completo
 
+// main.js -> REEMPLAZA esta función por completo
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
     container.expenseDetails = data.expenseDetails || [];
-    
-    const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280']; // El último color es para "Otros"
 
-    // --- Componente 1: Resumen General ---
+    const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280'];
+
     const summary = data.summary;
     const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
     const netResultPercent = summary.totalBudget > 0 ? `(${(Math.abs(summary.netResult) / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
     const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-6 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p></div>`;
 
-    // --- Botón para Añadir Gasto Olvidado ---
-    const addExpenseButtonHTML = `
-        <div class="my-4 text-center">
-            <button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-200 transition">
-                + Añadir un gasto olvidado en este mes
-            </button>
-        </div>
-    `;
+    const addExpenseButtonHTML = `<div class="my-4 text-center"><button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-200 transition">+ Añadir un gasto olvidado en este mes</button></div>`;
 
-    // --- Componente 2: Desglose de "Otros" ---
     let othersHTML = '';
     if (data.othersBreakdown && data.othersBreakdown.length > 0) {
         const othersTableRows = data.othersBreakdown.map(item => `
@@ -539,96 +531,47 @@ function renderMonthlyAnalysisReport(data, year, month) {
                 <td class="py-2 pr-2">${item.category}</td>
                 <td class="py-2 pr-2 text-right font-medium">${formatCurrency(item.amount)}</td>
                 <td class="py-2 pl-2 text-right text-gray-600">${(item.amount / summary.totalSpent * 100).toFixed(1)}%</td>
-            </tr>
-        `).join('');
-        othersHTML = `
-            <div class="bg-gray-100 p-3 rounded-lg mt-4">
-                <h5 class="font-bold text-gray-600 text-sm mb-2">Desglose de "Otros"</h5>
-                <table class="w-full text-sm">
-                    <thead><tr class="text-left text-xs text-gray-500"><th class="font-normal">Categoría</th><th class="font-normal text-right">Monto</th><th class="font-normal text-right">% del Total</th></tr></thead>
-                    <tbody>${othersTableRows}</tbody>
-                </table>
-            </div>`;
+            </tr>`).join('');
+        othersHTML = `<div class="bg-gray-100 p-3 rounded-lg mt-4"><h5 class="font-bold text-gray-600 text-sm mb-2">Desglose de "Otros"</h5><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="font-normal">Categoría</th><th class="font-normal text-right">Monto</th><th class="font-normal text-right">% del Total</th></tr></thead><tbody>${othersTableRows}</tbody></table></div>`;
     }
 
-    // --- Componente 3: "Sabías que..." ---
     const funFacts = data.funFacts;
     let funFactsHTML = '';
     if (funFacts) {
         const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : '';
-        const activityFacts = funFacts.activityFrequency.map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('');
-        const mostActiveDayFact = funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos). Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${funFacts.mostActiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
-        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}. Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${funFacts.mostExpensiveDay.details.map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
+        const activityFacts = (funFacts.activityFrequency || []).map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('');
+        const mostActiveDayFact = funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos). Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${(funFacts.mostActiveDay.details || []).map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
+        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}. Detalle: <ul class="list-['-_'] list-inside ml-4 text-xs">${(funFacts.mostExpensiveDay.details || []).map(d => `<li>${d.detalle}: ${formatCurrency(d.monto)}</li>`).join('')}</ul></li>` : '';
 
-        funFactsHTML = `
-            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6">
-                <h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4>
-                <ul class="list-disc list-inside text-sm text-blue-700 space-y-2">
-                    ${supermarketFact}
-                    ${activityFacts}
-                    ${mostActiveDayFact}
-                    ${mostExpensiveDayFact}
-                </ul>
-            </div>
-        `;
+        funFactsHTML = `<div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6"><h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4><ul class="list-disc list-inside text-sm text-blue-700 space-y-2">${supermarketFact}${activityFacts}${mostActiveDayFact}${mostExpensiveDayFact}</ul></div>`;
     }
 
-    // --- Componente 4: Lista completa de categorías ---
-    const categoryAnalysisHTML = data.categoryAnalysis.map((cat) => {
+    const categoryAnalysisHTML = (data.categoryAnalysis || []).map((cat) => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
         if (cat.variationStatus) {
             if (cat.variationStatus === 'aumento') variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${cat.variationPercent.toFixed(1)}%</span>`;
             else if (cat.variationStatus === 'descenso') variationHTML = `<span class="text-sm font-semibold text-green-600">▼ ${cat.variationPercent.toFixed(1)}%</span>`;
         }
-        return `
-            <div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center">
-                        <span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span>
-                        <div><p class="font-bold text-gray-800">${cat.category}</p><p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p></div>
-                    </div>
-                    <div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div>
-                </div>
-                <div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div>
-            </div>`;
+        return `<div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}"><div class="flex justify-between items-center"><div class="flex items-center"><span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span><div><p class="font-bold text-gray-800">${cat.category}</p><p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p></div></div><div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div></div><div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div></div>`;
     }).join('');
 
-    // --- Ensamblaje Final en el orden correcto ---
-    container.innerHTML = `
-        ${summaryHTML}
-        ${addExpenseButtonHTML}
-        <div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>
-        ${othersHTML}
-        ${funFactsHTML}
-        <div class="mt-6">
-            <h4 class="font-bold text-gray-700 mb-2">Desglose Completo de Categorías</h4>
-            <div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div>
-        </div>
-    `;
-    
-    // --- Renderizado del Gráfico ---
-    new Chart($('#monthly-doughnut-chart').getContext('2d'), {
-        type: 'doughnut',
-        data: {
-            labels: data.chartData.map(c => c.category),
-            datasets: [{ data: data.chartData.map(c => c.currentAmount), backgroundColor: CHART_COLORS, borderColor: '#fff', borderWidth: 2 }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
-            plugins: { 
-                legend: { display: false },
-                datalabels: {
-                    formatter: (value, ctx) => {
-                        const total = ctx.chart.getDatasetMeta(0).total;
-                        const percentage = (value / total * 100);
-                        return percentage > 5 ? percentage.toFixed(0) + '%' : '';
-                    },
-                    color: '#fff', font: { weight: 'bold', size: 14 }
-                }
-            } 
-        },
-        plugins: [ChartDataLabels]
-    });
+    container.innerHTML = `${summaryHTML}${addExpenseButtonHTML}<div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>${othersHTML}${funFactsHTML}<div class="mt-6"><h4 class="font-bold text-gray-700 mb-2">Desglose Completo de Categorías</h4><div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div></div>`;
+
+    const chartData = data.chartData || [];
+    if(chartData.length > 0) {
+        const totalSpentForChart = chartData.reduce((sum, item) => sum + item.currentAmount, 0);
+        new Chart($('#monthly-doughnut-chart').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: chartData.map(c => c.category),
+                datasets: [{ data: chartData.map(c => c.currentAmount), backgroundColor: CHART_COLORS, borderColor: '#fff', borderWidth: 2 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, datalabels: { formatter: (value, ctx) => { if (totalSpentForChart === 0) return '0%'; const percentage = (value / totalSpentForChart * 100); return percentage > 5 ? percentage.toFixed(0) + '%' : ''; }, color: '#fff', font: { weight: 'bold', size: 14 } } } },
+            plugins: [ChartDataLabels]
+        });
+    }
 }
+
 
 async function handleReportCategoryClick(categoryItem) {
     const detailsContainer = categoryItem.querySelector('.category-expense-details');
