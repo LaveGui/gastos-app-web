@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwG4FcedBzYQ4vPpzbJOSg5jgqhU0P74jOECVIxEcSKw996QnJkDJ9qKE_e0OeK4mxh9Q/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycby8KiFt43MNk-X3o4tLM-VBI41bVDqPKsY5qSvS8kX0rrKN778uS8G0IBIaQMEO0Gp5fA/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -508,7 +508,22 @@ function renderMonthlyAnalysisReport(data, year, month) {
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
     const netResultPercent = summary.totalBudget > 0 ? `(${(Math.abs(summary.netResult) / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
     const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-6 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p></div>`;
+        // --- Botón para Añadir Gasto Olvidado ---
+    const addExpenseButtonHTML = `
+        <div class="my-4 text-center">
+            <button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-200 transition">
+                + Añadir un gasto olvidado en este mes
+            </button>
+        </div>
+    `;
 
+    // --- Ensamblaje Final en el orden correcto ---
+    container.innerHTML = `
+        ${summaryHTML}
+        ${addExpenseButtonHTML}  // <-- AÑADIMOS EL BOTÓN AQUÍ
+        <div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>
+        // ... el resto del código ...
+    `;
     // --- Componente 2: Desglose de "Otros" ---
     let othersHTML = '';
     if (data.othersBreakdown && data.othersBreakdown.length > 0) {
@@ -868,13 +883,18 @@ async function handleFormSubmit(e) {
         detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
+    const defaultDate = form.dataset.defaultDate;
+    if (defaultDate) {
+        data.fecha = defaultDate;
+    }
 
     closeModal();
     showLoader('Añadiendo gasto...');
 
     try {
-        const result = await apiService.call('addExpense', data);
-        if (result.status !== 'success') throw new Error(result.message);
+        // Llama a la API correcta dependiendo del caso
+        const action = defaultDate ? 'addHistoricalExpense' : 'addExpense';
+        const result = await apiService.call(action, data);
 
         // Llamamos a la función de actualización con TODOS los datos necesarios
         updateStateAfterAddExpense(result.data.receipt, result.data.budgetInfo, result.data.totalBudgetInfo);
