@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzSJAnaiYXp4M9HWq-eRZg02TX4BjUPm4JwdpVYrlUxz8jhFM83-ZgSsj05dBux5sud-g/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwG4FcedBzYQ4vPpzbJOSg5jgqhU0P74jOECVIxEcSKw996QnJkDJ9qKE_e0OeK4mxh9Q/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -492,7 +492,6 @@ async function handleMonthSelection(e) {
         showToast('No se pudo cargar el análisis del mes.', 'error');
     }
 }
-// main.js -> REEMPLAZA esta función por la versión final
 
 // main.js -> REEMPLAZA esta función por la versión final
 
@@ -501,52 +500,36 @@ function renderMonthlyAnalysisReport(data, year, month) {
     container.expenseDetails = data.expenseDetails || [];
     
     const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-    const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280'];
+    const CHART_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280']; // El último color es para "Otros"
 
-    // --- 1. Titular y Resumen ---
+    // --- Componente 1: Resumen General ---
     const summary = data.summary;
     const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
     const netResultPercent = summary.totalBudget > 0 ? `(${(Math.abs(summary.netResult) / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
+    const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-6 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p></div>`;
 
-    const summaryHTML = `
-        <div class="bg-gray-50 rounded-lg p-4 mb-6 text-center">
-            <p class="text-lg font-semibold ${netResultColor}">${netResultText}</p>
-            <p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}</p>
-        </div>
-    `;
+    // --- Componente 2: Desglose de "Otros" ---
+    let othersHTML = '';
+    if (data.othersBreakdown && data.othersBreakdown.length > 0) {
+        const othersTableRows = data.othersBreakdown.map(item => `
+            <tr class="border-b border-gray-200 last:border-b-0">
+                <td class="py-2 pr-2">${item.category}</td>
+                <td class="py-2 pr-2 text-right font-medium">${formatCurrency(item.amount)}</td>
+                <td class="py-2 pl-2 text-right text-gray-600">${(item.amount / summary.totalSpent * 100).toFixed(1)}%</td>
+            </tr>
+        `).join('');
+        othersHTML = `
+            <div class="bg-gray-100 p-3 rounded-lg mt-4">
+                <h5 class="font-bold text-gray-600 text-sm mb-2">Desglose de "Otros"</h5>
+                <table class="w-full text-sm">
+                    <thead><tr class="text-left text-xs text-gray-500"><th class="font-normal">Categoría</th><th class="font-normal text-right">Monto</th><th class="font-normal text-right">% del Total</th></tr></thead>
+                    <tbody>${othersTableRows}</tbody>
+                </table>
+            </div>`;
+    }
 
-    // --- 2. Lista completa de categorías (que ahora actúa como leyenda) ---
-    const categoryAnalysisHTML = data.categoryAnalysis.map((cat, index) => {
-        let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
-        if (cat.variationStatus) {
-             if (cat.variationStatus === 'aumento') {
-                variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${cat.variationPercent.toFixed(1)}%</span>`;
-            } else if (cat.variationStatus === 'descenso') {
-                variationHTML = `<span class="text-sm font-semibold text-green-600">▼ ${cat.variationPercent.toFixed(1)}%</span>`;
-            }
-        }
-        return `
-            <div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}" data-year="${year}" data-month="${month}">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center">
-                        <span class="w-3 h-3 rounded-full mr-3" style="background-color: ${CHART_COLORS[index] || CHART_COLORS[5]}"></span>
-                        <div>
-                            <p class="font-bold text-gray-800">${cat.category}</p>
-                            <p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>
-                        ${variationHTML}
-                    </div>
-                </div>
-                <div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div>
-            </div>
-        `;
-    }).join('');
-
-    // --- 3. "Sabías que..." reordenado y con detalles corregidos ---
+    // --- Componente 3: "Sabías que..." Reordenado ---
     const funFacts = data.funFacts;
     let funFactsHTML = '';
     if (funFacts) {
@@ -568,43 +551,55 @@ function renderMonthlyAnalysisReport(data, year, month) {
         `;
     }
 
-    // --- 4. Ensamblaje Final de la Interfaz ---
+    // --- Componente 4: Lista completa y detallada de categorías ---
+    const categoryAnalysisHTML = data.categoryAnalysis.map((cat) => {
+        let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
+        if (cat.variationStatus) {
+            if (cat.variationStatus === 'aumento') variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${cat.variationPercent.toFixed(1)}%</span>`;
+            else if (cat.variationStatus === 'descenso') variationHTML = `<span class="text-sm font-semibold text-green-600">▼ ${cat.variationPercent.toFixed(1)}%</span>`;
+        }
+        return `
+            <div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                        <span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span>
+                        <div><p class="font-bold text-gray-800">${cat.category}</p><p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p></div>
+                    </div>
+                    <div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div>
+                </div>
+                <div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div>
+            </div>`;
+    }).join('');
+
+    // --- Ensamblaje Final en el orden correcto ---
     container.innerHTML = `
         ${summaryHTML}
-        <div class="h-64 mb-4"><canvas id="monthly-doughnut-chart"></canvas></div>
-        <h4 class="font-bold text-gray-700 mb-2">Desglose de Gastos</h4>
-        <div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div>
+        <div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>
+        ${othersHTML}
         ${funFactsHTML}
+        <div class="mt-6">
+            <h4 class="font-bold text-gray-700 mb-2">Desglose Completo de Categorías</h4>
+            <div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div>
+        </div>
     `;
     
-    // --- 5. Renderizado del Gráfico con datos "Top 4 + Otros" ---
-    const chartData = data.chartData;
-    const totalSpentForChart = chartData.reduce((sum, item) => sum + item.currentAmount, 0);
-    
+    // --- Renderizado del Gráfico ---
     new Chart($('#monthly-doughnut-chart').getContext('2d'), {
         type: 'doughnut',
         data: {
-            labels: chartData.map(c => c.category),
-            datasets: [{
-                data: chartData.map(c => c.currentAmount),
-                backgroundColor: CHART_COLORS,
-                borderColor: '#fff',
-                borderWidth: 2,
-                hoverOffset: 4
-            }]
+            labels: data.chartData.map(c => c.category),
+            datasets: [{ data: data.chartData.map(c => c.currentAmount), backgroundColor: CHART_COLORS, borderColor: '#fff', borderWidth: 2 }]
         },
-        options: { 
-            responsive: true, maintainAspectRatio: false, cutout: '60%',
+        options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
             plugins: { 
                 legend: { display: false },
                 datalabels: {
                     formatter: (value, ctx) => {
-                        if (totalSpentForChart === 0) return '0%';
-                        const percentage = (value / totalSpentForChart * 100);
+                        const total = ctx.chart.getDatasetMeta(0).total;
+                        const percentage = (value / total * 100);
                         return percentage > 5 ? percentage.toFixed(0) + '%' : '';
                     },
-                    color: '#fff',
-                    font: { weight: 'bold', size: 14 }
+                    color: '#fff', font: { weight: 'bold', size: 14 }
                 }
             } 
         },
