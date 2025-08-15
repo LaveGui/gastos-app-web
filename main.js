@@ -650,35 +650,45 @@ function updateHistoryChart(selectedCategories) {
 
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-    const historyData = (state.history || []).filter(d => d.mes && d.ano && !isNaN(d.gasto))
+    // 1. Obtenemos y ordenamos los datos del historial, asegurándonos de que son válidos.
+    const historyData = (state.history || [])
+        .filter(d => d.mes && d.ano && !isNaN(d.gasto))
         .sort((a,b) => (a.ano * 100 + meses.indexOf(a.mes)) - (b.ano * 100 + meses.indexOf(b.mes)));
 
+    // 2. Creamos las etiquetas únicas para el eje X (ej: "Ago 2025")
     const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
 
+    // 3. Creamos un dataset por cada categoría seleccionada en los filtros
     const datasets = selectedCategories.map((cat, index) => {
+        
+        // 4. Mapeamos cada etiqueta del eje X a un valor de gasto
         const data = labels.map(label => {
-            const [mes, ano] = label.split(' ');
+            const [mesAbbr, ano] = label.split(' ');
 
-            // [CORREGIDO] Lógica para calcular el total o filtrar por categoría
-            const relevantEntries = historyData.filter(d => {
-                const monthMatch = d.mes.startsWith(mes);
+            // Lógica corregida y optimizada
+            const monthEntry = historyData.find(d => {
+                // ✅ MEJORA 1: Comparación de mes robusta
+                // Comparamos los 3 primeros caracteres en minúsculas para evitar errores.
+                const monthMatch = d.mes.substring(0, 3).toLowerCase() === mesAbbr.toLowerCase();
                 const yearMatch = d.ano == ano;
 
-                // Si la categoría es "Total", sumamos todo. Si no, filtramos por esa categoría.
-                if (normalizeString(cat) === 'total') {
-                    return yearMatch && monthMatch;
-                }
-                return yearMatch && monthMatch && (normalizeString(d.categoria) === normalizeString(cat));
+                // ✅ MEJORA 2: Lógica de "Total" unificada y eficiente
+                // Ya no sumamos todas las categorías. Buscamos directamente la fila
+                // cuya categoría coincida, sea "Super", "Viajes" o "Total".
+                const categoryMatch = normalizeString(d.categoria) === normalizeString(cat);
+
+                return yearMatch && monthMatch && categoryMatch;
             });
 
-            return relevantEntries.reduce((sum, entry) => sum + (entry.gasto || 0), 0);
+            // Si encontramos la entrada para ese mes y categoría, devolvemos su gasto. Si no, 0.
+            return monthEntry ? (monthEntry.gasto || 0) : 0;
         });
 
         const colors = ['#0284C7', '#DC2626', '#16A34A', '#F97316', '#7C3AED'];
         return { label: cat, data, borderColor: colors[index % colors.length], fill: false, tension: 0.1 };
     });
 
-    // Mantenemos el código de renderizado del gráfico que ya tenías
+    // 5. Renderizamos el gráfico (esta parte se mantiene igual)
     const ctx = $('#history-chart').getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
