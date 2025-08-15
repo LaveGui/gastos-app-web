@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbx9U0PVL_D1kwH6PW0hAjTgsPOiX-Wsasd_7KVmKoPDn2Au1RFUkNAFd8IwTI380bP4Tg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbz6OEMLwEAujnbD1iEiy1iGHYjX45z7cSjF3K6JgAZfn89Z5zb09UpZ5cgKFlleFJ7aLQ/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -549,9 +549,11 @@ function renderMonthlyAnalysisReport(data, year, month) {
     const summary = data.summary;
     const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
-    const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-2 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)}.</p></div>`;
+    
+    // ✅ CORRECCIÓN: Añadimos el cálculo y la variable para el porcentaje.
+    const netResultPercent = summary.totalBudget > 0 ? `(${(summary.totalSpent / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
+    const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-2 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}.</p></div>`;
 
-    // ✅ CORRECCIÓN: Volvemos a generar el HTML para el desglose de "Otros"
     let othersHTML = '';
     if (data.othersBreakdown && data.othersBreakdown.length > 0) {
         const othersTableRows = data.othersBreakdown.map(item => `
@@ -565,10 +567,10 @@ function renderMonthlyAnalysisReport(data, year, month) {
     let funFactsHTML = '';
     if (data.funFacts && Object.keys(data.funFacts).length > 0) {
         const funFacts = data.funFacts;
-        const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>.</li>` : '';
+        const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : '';
         const activityFacts = (funFacts.activityFrequency || []).map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('');
         const mostActiveDayFact = funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos).</li>` : '';
-        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : '';
+        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : '';
         
         funFactsHTML = `<div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6"><h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4><ul class="list-disc list-inside text-sm text-blue-700 space-y-2">${supermarketFact}${activityFacts}${mostActiveDayFact}${mostExpensiveDayFact}</ul></div>`;
     }
@@ -582,7 +584,6 @@ function renderMonthlyAnalysisReport(data, year, month) {
         return `<div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}"><div class="flex justify-between items-center"><div class="flex items-center"><span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span><div><p class="font-bold text-gray-800">${cat.category}</p>${cat.transactionCount > 0 ? `<p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>` : ''}</div></div><div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div></div><div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div></div>`;
     }).join('');
 
-    // ✅ CORRECCIÓN: Insertamos la variable 'othersHTML' en la vista.
     container.innerHTML = `${summaryHTML}${actionButtonsHTML}<div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>${othersHTML}${funFactsHTML}<div class="mt-6"><h4 class="font-bold text-gray-700 mb-2">Desglose de Categorías</h4><div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div></div>`;
 
     const chartData = data.chartData || [];
@@ -625,7 +626,6 @@ async function handleReportCategoryClick(categoryItem) {
         detailsContainer.innerHTML = expensesHTML || '<p class="text-sm text-gray-400">No hay detalles de gastos.</p>';
     }
 }
-
 
 
 function populateInformesFilters() {
