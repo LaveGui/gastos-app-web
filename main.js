@@ -73,15 +73,39 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
+// main.js -> REEMPLAZA esta función por completo
+
 function initRouter() {
+    // Listener para la barra de navegación inferior
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
         if (navButton?.dataset.view) navigateTo(navButton.dataset.view);
     });
+
+    // Listener central para el contenido de la app (delegación de eventos)
     $('#app-content').addEventListener('click', e => {
+        // Clic en una categoría del Dashboard
         const categoryCard = e.target.closest('.category-item');
         if (categoryCard) {
             toggleCategoryDetails(categoryCard);
+            return; // Detenemos la ejecución para no buscar otros matches
+        }
+
+        // Clic en una categoría del reporte de Análisis Mensual
+        const reportCategoryItem = e.target.closest('.report-category-item');
+        if (reportCategoryItem) {
+            handleReportCategoryClick(reportCategoryItem);
+            return;
+        }
+        
+        // Clic en el botón de añadir gasto olvidado
+        const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
+        if (forgottenBtn) {
+            const { year, month } = forgottenBtn.dataset;
+            // Corregimos la fecha para que el modal sepa que es un gasto histórico
+            const historicalDate = new Date(year, month - 1, 15);
+            openModal(null, historicalDate.toISOString()); // Pasamos la fecha como segundo argumento
+            return;
         }
     });
 }
@@ -405,6 +429,7 @@ function renderViewShell(title, content) {
 }
 
 // main.js -> REEMPLAZA esta función por completo
+
 async function renderInformesView() {
     // 1. Dibuja el esqueleto de la página
     renderViewShell('Informes', `
@@ -425,7 +450,7 @@ async function renderInformesView() {
         </div>
     `);
 
-    // 2. Espera a tener los datos del historial ANTES de continuar
+    // 2. Espera a tener los datos del historial
     try {
         if (!state.history || state.history.length === 0) {
             showLoader('Cargando historial...');
@@ -445,23 +470,11 @@ async function renderInformesView() {
     updateHistoryChart(['Total']);
     populateMonthSelector();
 
-    // 4. Añadimos los listeners de eventos
-    $('#month-selector').addEventListener('change', handleMonthSelection);
-
-    const appContent = document.getElementById('app-content');
-    const newAppContent = appContent.cloneNode(true);
-    appContent.parentNode.replaceChild(newAppContent, appContent);
-
-    newAppContent.addEventListener('click', (e) => {
-        const categoryItem = e.target.closest('.report-category-item');
-        if (categoryItem) handleReportCategoryClick(categoryItem);
-
-        const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
-        if (forgottenBtn) {
-            const { year, month } = forgottenBtn.dataset;
-            openModal(new Date(year, month - 1, 15));
-        }
-    });
+    // 4. Añadimos el listener para el selector de mes (el resto se gestionará en initRouter)
+    const monthSelector = $('#month-selector');
+    if (monthSelector) {
+        monthSelector.addEventListener('change', handleMonthSelection);
+    }
 }
 
 function populateMonthSelector() {
