@@ -709,6 +709,7 @@ function updateHistoryChart(selectedCategories) {
     }
 }
 
+
 function openModal() {
     let form = $('#expense-form');
     if (!form) {
