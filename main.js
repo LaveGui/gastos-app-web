@@ -642,54 +642,50 @@ function populateInformesFilters() {
     if(totalChip) totalChip.classList.add('is-active', 'bg-blue-600', 'text-white');
 }
 
-// main.js -> Reemplaza esta función
+
+// main.js -> Reemplaza esta función por la versión robustecida
 
 function updateHistoryChart(selectedCategories) {
     if (state.activeChart) state.activeChart.destroy();
-    if (!document.getElementById('history-chart')) return;
+    const chartCanvas = document.getElementById('history-chart');
+    if (!chartCanvas) return;
 
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-    // 1. Obtenemos y ordenamos los datos del historial, asegurándonos de que son válidos.
+    // ✅ 1. PROCESAMIENTO SEGURO DE DATOS
+    // Convertimos los datos a un formato numérico seguro antes de usarlos.
     const historyData = (state.history || [])
-        .filter(d => d.mes && d.ano && !isNaN(d.gasto))
+        .map(d => ({
+            ...d,
+            ano: parseInt(d.ano, 10), // Convertimos el año a número entero
+            gasto: parseFloat(d.gasto)   // Nos aseguramos que el gasto sea un número flotante
+        }))
+        .filter(d => d.mes && !isNaN(d.ano) && !isNaN(d.gasto)) // Filtramos filas con datos inválidos
         .sort((a,b) => (a.ano * 100 + meses.indexOf(a.mes)) - (b.ano * 100 + meses.indexOf(b.mes)));
 
-    // 2. Creamos las etiquetas únicas para el eje X (ej: "Ago 2025")
     const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
 
-    // 3. Creamos un dataset por cada categoría seleccionada en los filtros
     const datasets = selectedCategories.map((cat, index) => {
-        
-        // 4. Mapeamos cada etiqueta del eje X a un valor de gasto
         const data = labels.map(label => {
-            const [mesAbbr, ano] = label.split(' ');
+            const [mesAbbr, anoStr] = label.split(' ');
+            const ano = parseInt(anoStr, 10);
 
-            // Lógica corregida y optimizada
             const monthEntry = historyData.find(d => {
-                // ✅ MEJORA 1: Comparación de mes robusta
-                // Comparamos los 3 primeros caracteres en minúsculas para evitar errores.
                 const monthMatch = d.mes.substring(0, 3).toLowerCase() === mesAbbr.toLowerCase();
-                const yearMatch = d.ano == ano;
-
-                // ✅ MEJORA 2: Lógica de "Total" unificada y eficiente
-                // Ya no sumamos todas las categorías. Buscamos directamente la fila
-                // cuya categoría coincida, sea "Super", "Viajes" o "Total".
+                const yearMatch = d.ano === ano; // Comparación numérica estricta
                 const categoryMatch = normalizeString(d.categoria) === normalizeString(cat);
-
                 return yearMatch && monthMatch && categoryMatch;
             });
 
-            // Si encontramos la entrada para ese mes y categoría, devolvemos su gasto. Si no, 0.
-            return monthEntry ? (monthEntry.gasto || 0) : 0;
+            return monthEntry ? monthEntry.gasto : 0;
         });
 
         const colors = ['#0284C7', '#DC2626', '#16A34A', '#F97316', '#7C3AED'];
         return { label: cat, data, borderColor: colors[index % colors.length], fill: false, tension: 0.1 };
     });
 
-    // 5. Renderizamos el gráfico (esta parte se mantiene igual)
-    const ctx = $('#history-chart').getContext('2d');
+    // 2. Renderizamos el gráfico (esta parte se mantiene igual)
+    const ctx = chartCanvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
     gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
