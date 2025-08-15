@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbx7g2gKa5dnZrD3qnoX2SIWjq0dPD7ZSBORTGqfvIVKL7Nz4ea3slsJ0dvfeWddtkNR1Q/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwDgDLFoJ9loJ4nw4b4V5MR4r9pSnOF3egXmCEMxED1s5ywJATDfuc9LqY7-xX86jPqFw/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
