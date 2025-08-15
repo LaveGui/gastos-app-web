@@ -643,27 +643,42 @@ function populateInformesFilters() {
 }
 
 
-// main.js -> Reemplaza esta función por la versión robustecida
+// main.js -> Reemplaza la función actual por esta versión con logs
 
 function updateHistoryChart(selectedCategories) {
-    if (state.activeChart) state.activeChart.destroy();
+    console.log("--- INICIANDO updateHistoryChart ---");
+    console.log("Categorías seleccionadas para el gráfico:", selectedCategories);
+
+    if (state.activeChart) {
+        state.activeChart.destroy();
+    }
     const chartCanvas = document.getElementById('history-chart');
-    if (!chartCanvas) return;
+    if (!chartCanvas) {
+        console.error("Error Crítico: No se encontró el elemento canvas #history-chart en el DOM.");
+        return;
+    }
+
+    // 1. LOG: Revisamos los datos crudos que llegan a la función
+    console.log("1. Datos crudos disponibles en state.history:", JSON.parse(JSON.stringify(state.history || [])));
 
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-    // ✅ 1. PROCESAMIENTO SEGURO DE DATOS
-    // Convertimos los datos a un formato numérico seguro antes de usarlos.
     const historyData = (state.history || [])
         .map(d => ({
             ...d,
-            ano: parseInt(d.ano, 10), // Convertimos el año a número entero
-            gasto: parseFloat(d.gasto)   // Nos aseguramos que el gasto sea un número flotante
+            ano: parseInt(d.ano, 10),
+            gasto: parseFloat(d.gasto)
         }))
-        .filter(d => d.mes && !isNaN(d.ano) && !isNaN(d.gasto)) // Filtramos filas con datos inválidos
+        .filter(d => d.mes && !isNaN(d.ano) && d.ano > 0 && !isNaN(d.gasto))
         .sort((a,b) => (a.ano * 100 + meses.indexOf(a.mes)) - (b.ano * 100 + meses.indexOf(b.mes)));
 
+    // 2. LOG: Vemos el resultado después de limpiar, convertir y ordenar los datos
+    console.log("2. Datos procesados y ordenados (historyData):", historyData);
+
     const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
+
+    // 3. LOG: Comprobamos si las etiquetas para el eje X se generaron correctamente
+    console.log("3. Etiquetas generadas para el gráfico (labels):", labels);
 
     const datasets = selectedCategories.map((cat, index) => {
         const data = labels.map(label => {
@@ -672,11 +687,10 @@ function updateHistoryChart(selectedCategories) {
 
             const monthEntry = historyData.find(d => {
                 const monthMatch = d.mes.substring(0, 3).toLowerCase() === mesAbbr.toLowerCase();
-                const yearMatch = d.ano === ano; // Comparación numérica estricta
+                const yearMatch = d.ano === ano;
                 const categoryMatch = normalizeString(d.categoria) === normalizeString(cat);
                 return yearMatch && monthMatch && categoryMatch;
             });
-
             return monthEntry ? monthEntry.gasto : 0;
         });
 
@@ -684,7 +698,13 @@ function updateHistoryChart(selectedCategories) {
         return { label: cat, data, borderColor: colors[index % colors.length], fill: false, tension: 0.1 };
     });
 
-    // 2. Renderizamos el gráfico (esta parte se mantiene igual)
+    // 4. LOG: Este es el objeto final que se le pasa a Chart.js. Es el más importante.
+    console.log("4. Datasets finales generados para Chart.js:", JSON.parse(JSON.stringify(datasets)));
+
+    if (datasets.length === 0 || datasets.every(d => d.data.every(val => val === 0))) {
+        console.warn("ADVERTENCIA: Los datasets están vacíos o todos sus valores son cero. El gráfico podría aparecer en blanco o plano.");
+    }
+    
     const ctx = chartCanvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
@@ -701,6 +721,8 @@ function updateHistoryChart(selectedCategories) {
             scales: { y: { beginAtZero: true, grid: { color: '#e5e7eb' } }, x: { grid: { display: false } } }
         } 
     });
+    
+    console.log("--- FINALIZANDO updateHistoryChart: Objeto Chart.js creado. ---");
 
     if (state.activeChart.data.datasets.length > 0) {
         state.activeChart.data.datasets[0].fill = true;
