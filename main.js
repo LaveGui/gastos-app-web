@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwDgDLFoJ9loJ4nw4b4V5MR4r9pSnOF3egXmCEMxED1s5ywJATDfuc9LqY7-xX86jPqFw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbx9U0PVL_D1kwH6PW0hAjTgsPOiX-Wsasd_7KVmKoPDn2Au1RFUkNAFd8IwTI380bP4Tg/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -520,25 +520,19 @@ async function handleMonthSelection(e) {
     }
 }
 
-
 // main.js -> REEMPLAZA esta función por completo
 
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
     if (!container) return;
 
-    // Guardamos los detalles de los gastos si existen (solo para meses abiertos)
     container.expenseDetails = data.expenseDetails || [];
-
     const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
-    // --- 1. LÓGICA PARA BOTONES DE ACCIÓN ---
     let actionButtonsHTML = '';
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const reportDate = new Date(year, month - 1, 1);
-
-    // Verificamos si el mes está abierto y si es un mes pasado (no el actual).
     const isReviewPeriod = data.monthStatus === 'Abierto' && reportDate < today;
 
     if (isReviewPeriod) {
@@ -552,25 +546,33 @@ function renderMonthlyAnalysisReport(data, year, month) {
             </div>`;
     }
 
-    // --- 2. LÓGICA PARA EL RESUMEN PRINCIPAL ---
     const summary = data.summary;
     const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
     const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
     const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-2 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)}.</p></div>`;
 
-    // --- 3. LÓGICA CONDICIONAL PARA "SABÍAS QUE..." ---
+    // ✅ CORRECCIÓN: Volvemos a generar el HTML para el desglose de "Otros"
+    let othersHTML = '';
+    if (data.othersBreakdown && data.othersBreakdown.length > 0) {
+        const othersTableRows = data.othersBreakdown.map(item => `
+            <tr class="border-b border-gray-200 last:border-b-0">
+                <td class="py-2 pr-2">${item.category}</td>
+                <td class="py-2 pr-2 text-right font-medium">${formatCurrency(item.amount)}</td>
+            </tr>`).join('');
+        othersHTML = `<div class="bg-gray-100 p-3 rounded-lg mt-4"><h5 class="font-bold text-gray-600 text-sm mb-2">Desglose de "Otros"</h5><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="font-normal">Categoría</th><th class="font-normal text-right">Monto</th></tr></thead><tbody>${othersTableRows}</tbody></table></div>`;
+    }
+
     let funFactsHTML = '';
     if (data.funFacts && Object.keys(data.funFacts).length > 0) {
         const funFacts = data.funFacts;
-        const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>. Tu comercio más visitado fue <strong>${funFacts.supermarket.mostFrequentStore}</strong> y tu ticket promedio fue de ${formatCurrency(funFacts.supermarket.averageTicket)}.</li>` : '';
+        const supermarketFact = funFacts.supermarket ? `<li>Fuiste al súper <strong>${funFacts.supermarket.transactionCount} veces</strong>.</li>` : '';
         const activityFacts = (funFacts.activityFrequency || []).map(act => `<li>Registraste <strong>${act.count}</strong> gastos en <strong>${act.category}</strong>.</li>`).join('');
         const mostActiveDayFact = funFacts.mostActiveDay?.date ? `<li>El día con más actividad fue el <strong>${new Date(funFacts.mostActiveDay.date).toLocaleDateString('es-ES')}</strong> (${funFacts.mostActiveDay.count} gastos).</li>` : '';
-        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con un total de ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : '';
+        const mostExpensiveDayFact = funFacts.mostExpensiveDay?.date ? `<li>Tu día de mayor gasto discrecional fue el <strong>${new Date(funFacts.mostExpensiveDay.date).toLocaleDateString('es-ES')}</strong> con ${formatCurrency(funFacts.mostExpensiveDay.amount)}.</li>` : '';
         
         funFactsHTML = `<div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6"><h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4><ul class="list-disc list-inside text-sm text-blue-700 space-y-2">${supermarketFact}${activityFacts}${mostActiveDayFact}${mostExpensiveDayFact}</ul></div>`;
     }
 
-    // --- 4. ENSAMBLAJE FINAL DEL HTML ---
     const categoryAnalysisHTML = (data.categoryAnalysis || []).map((cat) => {
         let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
         if (cat.variationStatus && cat.variationStatus !== 'estable') {
@@ -580,9 +582,9 @@ function renderMonthlyAnalysisReport(data, year, month) {
         return `<div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}"><div class="flex justify-between items-center"><div class="flex items-center"><span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span><div><p class="font-bold text-gray-800">${cat.category}</p>${cat.transactionCount > 0 ? `<p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>` : ''}</div></div><div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div></div><div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div></div>`;
     }).join('');
 
-    container.innerHTML = `${summaryHTML}${actionButtonsHTML}<div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>${funFactsHTML}<div class="mt-6"><h4 class="font-bold text-gray-700 mb-2">Desglose de Categorías</h4><div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div></div>`;
+    // ✅ CORRECCIÓN: Insertamos la variable 'othersHTML' en la vista.
+    container.innerHTML = `${summaryHTML}${actionButtonsHTML}<div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>${othersHTML}${funFactsHTML}<div class="mt-6"><h4 class="font-bold text-gray-700 mb-2">Desglose de Categorías</h4><div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div></div>`;
 
-    // --- 5. DIBUJAR GRÁFICO (sin cambios) ---
     const chartData = data.chartData || [];
     if(chartData.length > 0) {
         new Chart($('#monthly-doughnut-chart').getContext('2d'), {
@@ -596,6 +598,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
         });
     }
 }
+
 
 async function handleReportCategoryClick(categoryItem) {
     const detailsContainer = categoryItem.querySelector('.category-expense-details');
