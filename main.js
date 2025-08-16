@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbz6OEMLwEAujnbD1iEiy1iGHYjX45z7cSjF3K6JgAZfn89Z5zb09UpZ5cgKFlleFJ7aLQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyXhEPEefZ4MgpiM7k_7RRXi52l38EjDfVF_k6yh60iCD2pPE6V-kw5ZkEvAI3wBS0/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -73,39 +73,44 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
-// main.js -> REEMPLAZA esta función por completo
-
+// main.js -> REEMPLAZA la función initRouter para que escuche el clic en el botón de archivar
 function initRouter() {
-    // Listener para la barra de navegación inferior
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
         if (navButton?.dataset.view) navigateTo(navButton.dataset.view);
     });
 
-    // Listener central para el contenido de la app (delegación de eventos)
-    $('#app-content').addEventListener('click', e => {
-        // Clic en una categoría del Dashboard
+    $('#app-content').addEventListener('click', async e => { // La hacemos async para usar await
         const categoryCard = e.target.closest('.category-item');
-        if (categoryCard) {
-            toggleCategoryDetails(categoryCard);
-            return; // Detenemos la ejecución para no buscar otros matches
-        }
+        if (categoryCard) return toggleCategoryDetails(categoryCard);
 
-        // Clic en una categoría del reporte de Análisis Mensual
         const reportCategoryItem = e.target.closest('.report-category-item');
-        if (reportCategoryItem) {
-            handleReportCategoryClick(reportCategoryItem);
-            return;
-        }
+        if (reportCategoryItem) return handleReportCategoryClick(reportCategoryItem);
         
-        // Clic en el botón de añadir gasto olvidado
         const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
         if (forgottenBtn) {
             const { year, month } = forgottenBtn.dataset;
-            // Corregimos la fecha para que el modal sepa que es un gasto histórico
             const historicalDate = new Date(year, month - 1, 15);
-            openModal(null, historicalDate.toISOString()); // Pasamos la fecha como segundo argumento
-            return;
+            return openModal(null, historicalDate.toISOString());
+        }
+
+        // ✅ AÑADIDO: Lógica para el botón de archivar
+        const archiveBtn = e.target.closest('#archive-month-btn');
+        if (archiveBtn) {
+            const { year, month } = archiveBtn.dataset;
+            if (confirm(`¿Estás seguro de que quieres cerrar y archivar el mes ${month}/${year}? Esta acción no se puede deshacer.`)) {
+                showLoader('Archivando mes...');
+                try {
+                    await apiService.call('archiveMonth', { year, month });
+                    showToast('Mes archivado con éxito.', 'success');
+                    // Forzamos la recarga del informe para que ya no muestre los botones
+                    $('#month-selector').dispatchEvent(new Event('change'));
+                } catch (error) {
+                    showToast(error.message, 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
         }
     });
 }
@@ -759,16 +764,22 @@ function updateHistoryChart(selectedCategories) {
 }
 
 
-function openModal() {
+// main.js -> REEMPLAZA esta función por la versión 100% completa
+
+function openModal(category = null, defaultDate = null) {
     let form = $('#expense-form');
+    // Esta es la parte que faltaba: crea el modal si no existe
     if (!form) {
         const modalContainer = $('#expense-modal');
         if (!modalContainer) {
              const modalHtml = `<div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50"><div class="bg-white rounded-lg shadow-xl w-full max-w-md"><form id="expense-form" class="p-6"></form></div></div>`;
              document.body.insertAdjacentHTML('beforeend', modalHtml);
         }
+        form = $('#expense-form'); // Reasignamos la variable form
     }
-    $('#expense-form').innerHTML = `
+
+    // El resto de la función se mantiene igual
+    form.innerHTML = `
         <h3 id="modal-title" class="text-xl font-semibold mb-4">Añadir Gasto</h3>
         <div class="mb-4">
             <p class="block text-sm font-medium text-gray-700 mb-2">Categoría</p>
@@ -779,9 +790,15 @@ function openModal() {
             <button type="button" id="modal-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cancelar</button>
             <button type="submit" id="modal-save-button" class="bg-blue-600 text-white px-4 py-2 rounded-md">Guardar</button>
         </div>`;
+    
+    if (defaultDate) {
+        form.dataset.defaultDate = defaultDate;
+        $('#modal-title').textContent = 'Añadir Gasto Olvidado';
+    }
+
     populateCategoryButtons();
     $('#expense-modal').classList.remove('hidden');
-    $('#expense-form').addEventListener('submit', handleFormSubmit);
+    form.addEventListener('submit', handleFormSubmit);
 }
 
 function closeModal() {
@@ -873,8 +890,6 @@ function handleSupermarketSelection(button) {
     }
 }
 
-// main.js -> REEMPLAZA esta función por completo
-
 async function handleFormSubmit(e) {
     e.preventDefault();
     if (!state.selectedCategory) { showToast('Selecciona una categoría.', 'error'); return; }
@@ -897,22 +912,21 @@ async function handleFormSubmit(e) {
     }
 
     closeModal();
-    showLoader('Añadiendo gasto...');
+    showLoader('Procesando gasto...');
 
     try {
-        const action = defaultDate ? 'addHistoricalExpense' : 'addExpense';
+        // ✅ CAMBIO: Usamos una acción más específica 'addForgottenExpense'
+        const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
         if (action === 'addExpense' && result.data.receipt) {
             updateStateAfterAddExpense(result.data.receipt, result.data.budgetInfo, result.data.totalBudgetInfo);
             showConfirmationToast(result.data.receipt, result.data.budgetInfo);
         } else {
-            showToast(result.data.message || "Acción completada", 'success');
-            // Forzamos la recarga del informe para ver el nuevo gasto reflejado
-            const monthSelector = $('#month-selector');
-            if (monthSelector) {
-                 monthSelector.dispatchEvent(new Event('change'));
-            }
+            // ✅ CORRECCIÓN: En lugar de recargar, redibujamos el informe con los nuevos datos.
+            showToast("Gasto olvidado añadido.", 'success');
+            const date = new Date(data.fecha);
+            renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
         }
     } catch (error) { 
         showToast(error.message, 'error'); 
