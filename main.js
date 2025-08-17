@@ -1166,13 +1166,18 @@ const apiService = {
     }
 };
 
-// main.js -> REEMPLAZA esta función para añadir el estilo 'info'
+// main.js -> REEMPLAZA esta función por la versión con mejor animación y botón de cierre
 function showToast(message, type = 'success') {
     const container = $('#toast-container');
     if (!container) return;
+
+    // Eliminamos cualquier toast anterior para no solaparlos
+    if (container.firstChild) {
+        container.firstChild.remove();
+    }
+
     const toast = document.createElement('div');
 
-    // ✅ CAMBIO: Se añade una nueva condición para el color de fondo 'info'
     let bgColor;
     switch (type) {
         case 'error':
@@ -1186,22 +1191,35 @@ function showToast(message, type = 'success') {
             break;
     }
 
-    toast.className = `p-4 rounded-lg text-white shadow-md mb-2 ${bgColor}`;
-    container.appendChild(toast);
+    // ✅ CAMBIO 1: Añadimos un flex container y un botón de cierre (X) al HTML
+    toast.className = `flex items-center justify-between p-4 rounded-lg text-white shadow-lg mb-2 ${bgColor}`;
+    toast.innerHTML = `
+        <span class="flex-grow">${message}</span>
+        <button class="ml-4 text-xl font-bold opacity-70 hover:opacity-100">&times;</button>
+    `;
     
-    // La animación se alarga a 6 segundos para dar tiempo a leer
+    container.appendChild(toast);
+
+    // ✅ CAMBIO 2: Nueva animación más clara (deslizar desde arriba)
     const animation = toast.animate([
-        { transform: 'translateY(20px)', opacity: 0 },
+        { transform: 'translateY(-100%)', opacity: 0 },
         { transform: 'translateY(0)', opacity: 1 },
         { transform: 'translateY(0)', opacity: 1 },
-        { transform: 'translateY(-20px)', opacity: 0 }
+        { transform: 'translateY(-100%)', opacity: 0 }
     ], {
-        duration: 6000, // Duración extendida
+        duration: 10000, // ✅ CAMBIO 3: Duración aumentada a 10 segundos
         easing: 'ease-in-out'
     });
 
+    // El botón de cierre elimina el toast inmediatamente
+    const closeButton = toast.querySelector('button');
+    closeButton.addEventListener('click', () => {
+        animation.cancel(); // Detenemos la animación
+        toast.remove();     // Eliminamos el elemento
+    });
+
+    // Cuando la animación termina, también se elimina el toast
     animation.onfinish = () => toast.remove();
-    toast.innerHTML = message;
 }
 
 function normalizeString(str) {
