@@ -73,7 +73,7 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
-// main.js -> REEMPLAZA la función initRouter para que escuche el clic en el nuevo emoji
+// main.js -> REEMPLAZA esta función para corregir la propagación de eventos
 function initRouter() {
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
@@ -81,9 +81,27 @@ function initRouter() {
     });
 
     $('#app-content').addEventListener('click', async e => {
-        const categoryCard = e.target.closest('.category-item');
-        if (categoryCard) return toggleCategoryDetails(categoryCard);
+        // --- INICIO DE LA CORRECCIÓN ---
 
+        // 1. Primero, comprobamos si se ha hecho clic en el objetivo más específico: el emoji.
+        const velocityEmoji = e.target.closest('.velocity-emoji');
+        if (velocityEmoji) {
+            // ✅ ¡LA LÍNEA CLAVE! Detenemos el evento para que no se propague a la tarjeta.
+            e.stopPropagation(); 
+            const message = velocityEmoji.dataset.tooltip;
+            showToast(message, 'info');
+            return; // Salimos de la función para no hacer más comprobaciones.
+        }
+
+        // 2. Si no se tocó el emoji, continuamos con el resto de las comprobaciones.
+        const categoryCard = e.target.closest('.category-item');
+        if (categoryCard) {
+            toggleCategoryDetails(categoryCard);
+            return;
+        }
+
+        // --- FIN DE LA CORRECCIÓN (el resto de la función sigue igual) ---
+        
         const reportCategoryItem = e.target.closest('.report-category-item');
         if (reportCategoryItem) return handleReportCategoryClick(reportCategoryItem);
         
@@ -109,13 +127,6 @@ function initRouter() {
                     hideLoader();
                 }
             }
-        }
-
-        // ✅ AÑADIDO: Lógica para mostrar el tooltip de velocidad al tocar el emoji
-        const velocityEmoji = e.target.closest('.velocity-emoji');
-        if (velocityEmoji) {
-            const message = velocityEmoji.dataset.tooltip;
-            showToast(message, 'info'); // Usamos un nuevo tipo 'info'
         }
     });
 }
