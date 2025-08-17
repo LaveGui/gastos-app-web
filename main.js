@@ -1166,12 +1166,11 @@ const apiService = {
     }
 };
 
-// main.js -> REEMPLAZA esta función por la versión con mejor animación y botón de cierre
+// main.js -> REEMPLAZA esta función por la versión con aparición instantánea y mayor duración
 function showToast(message, type = 'success') {
     const container = $('#toast-container');
     if (!container) return;
 
-    // Eliminamos cualquier toast anterior para no solaparlos
     if (container.firstChild) {
         container.firstChild.remove();
     }
@@ -1191,7 +1190,6 @@ function showToast(message, type = 'success') {
             break;
     }
 
-    // ✅ CAMBIO 1: Añadimos un flex container y un botón de cierre (X) al HTML
     toast.className = `flex items-center justify-between p-4 rounded-lg text-white shadow-lg mb-2 ${bgColor}`;
     toast.innerHTML = `
         <span class="flex-grow">${message}</span>
@@ -1200,25 +1198,22 @@ function showToast(message, type = 'success') {
     
     container.appendChild(toast);
 
-    // ✅ CAMBIO 2: Nueva animación más clara (deslizar desde arriba)
+    // ✅ CAMBIO 1: Nueva animación para aparecer al instante y solo desvanecerse al final.
     const animation = toast.animate([
-        { transform: 'translateY(-100%)', opacity: 0 },
-        { transform: 'translateY(0)', opacity: 1 },
-        { transform: 'translateY(0)', opacity: 1 },
-        { transform: 'translateY(-100%)', opacity: 0 }
+        { opacity: 1 }, // El mensaje es visible desde el principio.
+        { opacity: 1, offset: 0.9 }, // Se mantiene visible el 90% del tiempo.
+        { opacity: 0 }  // Se desvanece en el último 10% del tiempo.
     ], {
-        duration: 10000, // ✅ CAMBIO 3: Duración aumentada a 10 segundos
+        duration: 15000, // ✅ CAMBIO 2: Duración aumentada a 15 segundos.
         easing: 'ease-in-out'
     });
 
-    // El botón de cierre elimina el toast inmediatamente
     const closeButton = toast.querySelector('button');
     closeButton.addEventListener('click', () => {
-        animation.cancel(); // Detenemos la animación
-        toast.remove();     // Eliminamos el elemento
+        animation.cancel();
+        toast.remove();
     });
 
-    // Cuando la animación termina, también se elimina el toast
     animation.onfinish = () => toast.remove();
 }
 
