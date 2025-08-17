@@ -73,14 +73,14 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
-// main.js -> REEMPLAZA la función initRouter para que escuche el clic en el botón de archivar
+// main.js -> REEMPLAZA la función initRouter para que escuche el clic en el nuevo emoji
 function initRouter() {
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
         if (navButton?.dataset.view) navigateTo(navButton.dataset.view);
     });
 
-    $('#app-content').addEventListener('click', async e => { // La hacemos async para usar await
+    $('#app-content').addEventListener('click', async e => {
         const categoryCard = e.target.closest('.category-item');
         if (categoryCard) return toggleCategoryDetails(categoryCard);
 
@@ -94,7 +94,6 @@ function initRouter() {
             return openModal(null, historicalDate.toISOString());
         }
 
-        // ✅ AÑADIDO: Lógica para el botón de archivar
         const archiveBtn = e.target.closest('#archive-month-btn');
         if (archiveBtn) {
             const { year, month } = archiveBtn.dataset;
@@ -103,7 +102,6 @@ function initRouter() {
                 try {
                     await apiService.call('archiveMonth', { year, month });
                     showToast('Mes archivado con éxito.', 'success');
-                    // Forzamos la recarga del informe para que ya no muestre los botones
                     $('#month-selector').dispatchEvent(new Event('change'));
                 } catch (error) {
                     showToast(error.message, 'error');
@@ -111,6 +109,13 @@ function initRouter() {
                     hideLoader();
                 }
             }
+        }
+
+        // ✅ AÑADIDO: Lógica para mostrar el tooltip de velocidad al tocar el emoji
+        const velocityEmoji = e.target.closest('.velocity-emoji');
+        if (velocityEmoji) {
+            const message = velocityEmoji.dataset.tooltip;
+            showToast(message, 'info'); // Usamos un nuevo tipo 'info'
         }
     });
 }
@@ -247,13 +252,12 @@ function renderDashboardView() {
 }
 
 
-// main.js -> REEMPLAZA esta función para mostrar los nuevos emojis y tooltips
+// main.js -> REEMPLAZA esta función para usar atributos de datos en vez de 'title'
 function updateBudgetList(categories) {
     const listContainer = $('#budget-list');
     if (!listContainer) return;
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 };
     
-    // Mapeo de estados a emojis. Si un estado no está aquí, no se mostrará nada.
     const velocityEmojis = {
         warning: '⚠️',
         overspending: '🛑'
@@ -266,10 +270,10 @@ function updateBudgetList(categories) {
             const progressColor = percentage > 100 ? 'bg-red-500' : (percentage > 85 ? 'bg-yellow-500' : 'bg-blue-600');
             const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
 
-            // --- LÓGICA PARA EMOJI Y TOOLTIP DE VELOCIDAD ---
+            // Preparamos el emoji y el texto del tooltip
             const velocityEmoji = velocityEmojis[cat.spendingVelocity] || '';
             let tooltipText = '';
-            if (velocityEmoji) { // Solo creamos el texto si hay un emoji que mostrar
+            if (velocityEmoji) {
                 const projected = (cat.projectedSpend || 0).toLocaleString('es-ES', formatOptions);
                 const budget = (cat.presupuesto || 0).toLocaleString('es-ES', formatOptions);
                 if (cat.spendingVelocity === 'overspending') {
@@ -278,14 +282,16 @@ function updateBudgetList(categories) {
                     tooltipText = `Cuidado. A este ritmo, tu gasto proyectado es de ${projected}, muy cerca de tu presupuesto de ${budget}.`;
                 }
             }
-            // --- FIN DE LA LÓGICA ---
+            
+            // ✅ CAMBIO: Usamos una clase y un data-attribute en lugar de 'title'
+            const emojiSpan = velocityEmoji 
+                ? `<span class="velocity-emoji cursor-pointer" data-tooltip="${tooltipText}">${velocityEmoji}</span>`
+                : '';
 
             return `
             <div class="bg-white p-4 rounded-lg shadow-sm category-item cursor-pointer hover:shadow-md transition-shadow" data-category="${cat.detalle}">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="font-bold text-gray-700">${emoji} ${cat.detalle} 
-                        <span title="${tooltipText}" class="cursor-help">${velocityEmoji}</span>
-                    </span>
+                    <span class="font-bold text-gray-700">${emoji} ${cat.detalle} ${emojiSpan}</span>
                     <span class="font-semibold text-gray-800">${percentage.toFixed(1)}%</span>
                 </div>
                 <div class="progress-bar-bg">
@@ -1149,22 +1155,40 @@ const apiService = {
     }
 };
 
+// main.js -> REEMPLAZA esta función para añadir el estilo 'info'
 function showToast(message, type = 'success') {
     const container = $('#toast-container');
     if (!container) return;
     const toast = document.createElement('div');
-    const bgColor = type === 'error' ? 'bg-red-600' : (type === 'receipt' ? 'bg-blue-600' : 'bg-green-500');
-    toast.className = `p-4 rounded-lg text-white shadow-md mb-2`;
+
+    // ✅ CAMBIO: Se añade una nueva condición para el color de fondo 'info'
+    let bgColor;
+    switch (type) {
+        case 'error':
+            bgColor = 'bg-red-600';
+            break;
+        case 'info':
+            bgColor = 'bg-blue-600';
+            break;
+        default:
+            bgColor = 'bg-green-500';
+            break;
+    }
+
+    toast.className = `p-4 rounded-lg text-white shadow-md mb-2 ${bgColor}`;
     container.appendChild(toast);
+    
+    // La animación se alarga a 6 segundos para dar tiempo a leer
     const animation = toast.animate([
         { transform: 'translateY(20px)', opacity: 0 },
         { transform: 'translateY(0)', opacity: 1 },
         { transform: 'translateY(0)', opacity: 1 },
         { transform: 'translateY(-20px)', opacity: 0 }
     ], {
-        duration: 4000,
+        duration: 6000, // Duración extendida
         easing: 'ease-in-out'
     });
+
     animation.onfinish = () => toast.remove();
     toast.innerHTML = message;
 }
