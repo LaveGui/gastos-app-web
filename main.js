@@ -1,6 +1,6 @@
 // main.js - v5.0 - Dashboard Interactivo y Carga Rápida
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbyXhEPEefZ4MgpiM7k_7RRXi52l38EjDfVF_k6yh60iCD2pPE6V-kw5ZkEvAI3wBS0/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwSO_oquwn67QerFAV0EjGQ0aebSPTLqSsxWRIZ6gAbAEURhrJduUybgoEl83jiFpUGvg/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
@@ -247,30 +247,53 @@ function renderDashboardView() {
 }
 
 
-// [CORREGIDO] Se aplica el formato de moneda a ambos números.
+// main.js -> REEMPLAZA esta función para mostrar los nuevos emojis y tooltips
 function updateBudgetList(categories) {
     const listContainer = $('#budget-list');
     if (!listContainer) return;
-    const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
+    const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 };
     
+    // Mapeo de estados a emojis. Si un estado no está aquí, no se mostrará nada.
+    const velocityEmojis = {
+        warning: '⚠️',
+        overspending: '🛑'
+    };
+
     listContainer.innerHTML = categories
         .sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated))
         .map(cat => {
             const percentage = cat.presupuesto > 0 ? (cat.llevagastadoenelmes / cat.presupuesto) * 100 : 0;
             const progressColor = percentage > 100 ? 'bg-red-500' : (percentage > 85 ? 'bg-yellow-500' : 'bg-blue-600');
             const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
+
+            // --- LÓGICA PARA EMOJI Y TOOLTIP DE VELOCIDAD ---
+            const velocityEmoji = velocityEmojis[cat.spendingVelocity] || '';
+            let tooltipText = '';
+            if (velocityEmoji) { // Solo creamos el texto si hay un emoji que mostrar
+                const projected = (cat.projectedSpend || 0).toLocaleString('es-ES', formatOptions);
+                const budget = (cat.presupuesto || 0).toLocaleString('es-ES', formatOptions);
+                if (cat.spendingVelocity === 'overspending') {
+                    tooltipText = `¡Atención! A este ritmo, tu gasto proyectado es de ${projected}, superando tu presupuesto de ${budget}.`;
+                } else if (cat.spendingVelocity === 'warning') {
+                    tooltipText = `Cuidado. A este ritmo, tu gasto proyectado es de ${projected}, muy cerca de tu presupuesto de ${budget}.`;
+                }
+            }
+            // --- FIN DE LA LÓGICA ---
+
             return `
             <div class="bg-white p-4 rounded-lg shadow-sm category-item cursor-pointer hover:shadow-md transition-shadow" data-category="${cat.detalle}">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="font-bold text-gray-700">${emoji} ${cat.detalle}</span>
+                    <span class="font-bold text-gray-700">${emoji} ${cat.detalle} 
+                        <span title="${tooltipText}" class="cursor-help">${velocityEmoji}</span>
+                    </span>
                     <span class="font-semibold text-gray-800">${percentage.toFixed(1)}%</span>
                 </div>
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fg ${progressColor}" style="width: ${Math.min(percentage, 100)}%;"></div>
                 </div>
                 <div class="flex justify-between items-center mt-2 text-sm text-gray-500">
-                    <span>${(cat.llevagastadoenelmes || 0).toLocaleString('es-ES', formatOptions)}</span>
-                    <span>${(cat.presupuesto || 0).toLocaleString('es-ES', formatOptions)}</span>
+                    <span>${(cat.llevagastadoenelmes || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
+                    <span>${(cat.presupuesto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
                 </div>
                 <div class="category-details-container"></div>
             </div>`;
