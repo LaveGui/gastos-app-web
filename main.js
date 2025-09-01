@@ -522,15 +522,15 @@ async function renderInformesView() {
     }
 }
 
-// main.js -> REEMPLAZA esta función
+// main.js -> REEMPLAZA esta función por la versión mejorada
 
 function populateMonthSelector() {
     const selector = $('#month-selector');
-    if (!selector || !state.history || state.history.length === 0) return;
+    if (!selector) return;
 
-    // ✅ CORRECCIÓN: Usamos un objeto para evitar duplicados y facilitar la creación de fechas.
+    // 1. Obtenemos los meses ya archivados desde el historial como siempre
     const uniqueMonths = {};
-    state.history.forEach(item => {
+    (state.history || []).forEach(item => {
         const monthNumber = getMonthNumberFromName(item.mes);
         if (item.ano && monthNumber > -1) {
             const key = `${item.ano}-${String(monthNumber + 1).padStart(2, '0')}`;
@@ -540,14 +540,28 @@ function populateMonthSelector() {
         }
     });
 
-    // Ordenamos las claves para asegurar el orden cronológico descendente.
+    // ✅ AÑADIDO: Lógica para incluir el mes anterior si no está archivado
+    const now = new Date();
+    // Nos situamos en el mes anterior (ej. si hoy es Septiembre, nos da Agosto)
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthYear = prevMonthDate.getFullYear();
+    const prevMonthNumber = prevMonthDate.getMonth(); // 0-11
+    
+    const prevMonthKey = `${prevMonthYear}-${String(prevMonthNumber + 1).padStart(2, '0')}`;
+
+    // Si el mes anterior NO está en la lista de archivados, lo añadimos
+    if (!uniqueMonths[prevMonthKey]) {
+        uniqueMonths[prevMonthKey] = new Date(prevMonthYear, prevMonthNumber);
+    }
+    // --- Fin de la lógica añadida ---
+
+    // 2. Ordenamos las claves para asegurar el orden cronológico descendente.
     const sortedKeys = Object.keys(uniqueMonths).sort().reverse();
 
     selector.innerHTML = '<option value="">Selecciona...</option>';
     sortedKeys.forEach(key => {
         const date = uniqueMonths[key];
         const optionText = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-        // El valor sigue siendo el estándar "YYYY-MM" para la API.
         selector.innerHTML += `<option value="${key}">${optionText}</option>`;
     });
 }
