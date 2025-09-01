@@ -522,19 +522,33 @@ async function renderInformesView() {
     }
 }
 
+// main.js -> REEMPLAZA esta función
+
 function populateMonthSelector() {
     const selector = $('#month-selector');
     if (!selector || !state.history || state.history.length === 0) return;
 
-    // Creamos una lista única de meses/años del historial
-    const uniqueMonths = [...new Set(state.history.map(item => `${item.ano}-${(new Date(Date.parse(item.mes +" 1, 2012")).getMonth()+1).toString().padStart(2, '0')}`))].sort().reverse();
+    // ✅ CORRECCIÓN: Usamos un objeto para evitar duplicados y facilitar la creación de fechas.
+    const uniqueMonths = {};
+    state.history.forEach(item => {
+        const monthNumber = getMonthNumberFromName(item.mes);
+        if (item.ano && monthNumber > -1) {
+            const key = `${item.ano}-${String(monthNumber + 1).padStart(2, '0')}`;
+            if (!uniqueMonths[key]) {
+                uniqueMonths[key] = new Date(item.ano, monthNumber);
+            }
+        }
+    });
+
+    // Ordenamos las claves para asegurar el orden cronológico descendente.
+    const sortedKeys = Object.keys(uniqueMonths).sort().reverse();
 
     selector.innerHTML = '<option value="">Selecciona...</option>';
-    uniqueMonths.forEach(monthStr => {
-        const [year, month] = monthStr.split('-');
-        const date = new Date(year, month - 1);
+    sortedKeys.forEach(key => {
+        const date = uniqueMonths[key];
         const optionText = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-        selector.innerHTML += `<option value="${year}-${month}">${optionText}</option>`;
+        // El valor sigue siendo el estándar "YYYY-MM" para la API.
+        selector.innerHTML += `<option value="${key}">${optionText}</option>`;
     });
 }
 
@@ -715,33 +729,30 @@ function populateInformesFilters() {
 }
 
 
-// main.js -> REEMPLAZA esta función por la versión con la ordenación corregida
+// main.js -> REEMPLAZA esta función
+
 function updateHistoryChart(selectedCategories) {
     if (state.activeChart) {
         state.activeChart.destroy();
     }
     const chartCanvas = document.getElementById('history-chart');
-    if (!chartCanvas) return;
+    if (!chartCanvas) {
+        console.error("Error Crítico: No se encontró el elemento canvas #history-chart en el DOM.");
+        return;
+    }
 
-    const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-
-    // ✅ CORRECCIÓN: Convertimos a fechas reales para una ordenación infalible
+    // ✅ CORRECCIÓN: Usamos nuestra función `getMonthNumberFromName` para un ordenamiento robusto.
     const historyData = (state.history || [])
-        .map(d => {
-            const monthIndex = meses.findIndex(m => normalizeString(m) === normalizeString(d.mes));
-            return {
-                ...d,
-                ano: parseInt(d.ano, 10),
-                gasto: parseFloat(d.gasto),
-                // Creamos una fecha real para cada dato
-                date: new Date(parseInt(d.ano, 10), monthIndex) 
-            };
-        })
-        .filter(d => d.mes && !isNaN(d.ano) && d.ano > 0 && !isNaN(d.gasto) && d.date.getFullYear() > 1970)
-        // Ordenamos usando las fechas que acabamos de crear
-        .sort((a, b) => a.date - b.date);
+        .map(d => ({
+            ...d,
+            ano: parseInt(d.ano, 10),
+            gasto: parseFloat(d.gasto),
+            monthNumber: getMonthNumberFromName(d.mes) // Añadimos el número de mes
+        }))
+        .filter(d => d.mes && !isNaN(d.ano) && d.ano > 0 && !isNaN(d.gasto) && d.monthNumber > -1)
+        .sort((a,b) => (a.ano * 100 + a.monthNumber) - (b.ano * 100 + b.monthNumber)); // Ordenamos numéricamente
 
-    const labels = [...new Set(historyData.map(d => `${d.mes.substring(0, 3)} ${d.ano}`))]
+    const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
 
     const datasets = selectedCategories.map((cat, index) => {
         const data = labels.map(label => {
@@ -762,6 +773,10 @@ function updateHistoryChart(selectedCategories) {
     });
     
     const ctx = chartCanvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
+    gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+
     state.activeChart = new Chart(ctx, { 
         type: 'line', 
         data: { labels, datasets }, 
@@ -773,6 +788,12 @@ function updateHistoryChart(selectedCategories) {
             scales: { y: { beginAtZero: true, grid: { color: '#e5e7eb' } }, x: { grid: { display: false } } }
         } 
     });
+
+    if (state.activeChart.data.datasets.length > 0) {
+        state.activeChart.data.datasets[0].fill = true;
+        state.activeChart.data.datasets[0].backgroundColor = gradient;
+        state.activeChart.update();
+    }
 }
 
 // main.js -> REEMPLAZA esta función por la versión 100% completa
@@ -1215,6 +1236,19 @@ function showToast(message, type = 'success') {
     });
 
     animation.onfinish = () => toast.remove();
+}
+
+
+// main.js -> AÑADE esta nueva función auxiliar
+
+/**
+ * Convierte un nombre de mes en español a su número de mes (0-11).
+ * @param {string} monthName - El nombre del mes (ej. "Enero", "Febrero").
+ * @returns {number} - El número del mes, o -1 si no se encuentra.
+ */
+function getMonthNumberFromName(monthName) {
+    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    return meses.indexOf(monthName.toLowerCase());
 }
 
 function normalizeString(str) {
