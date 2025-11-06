@@ -73,7 +73,7 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
-// main.js -> REEMPLAZA esta función para corregir la propagación de eventos
+// main.js -> REEMPLAZA tu función initRouter por esta versión final
 function initRouter() {
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
@@ -81,27 +81,9 @@ function initRouter() {
     });
 
     $('#app-content').addEventListener('click', async e => {
-        // --- INICIO DE LA CORRECCIÓN ---
-
-        // 1. Primero, comprobamos si se ha hecho clic en el objetivo más específico: el emoji.
-        const velocityEmoji = e.target.closest('.velocity-emoji');
-        if (velocityEmoji) {
-            // ✅ ¡LA LÍNEA CLAVE! Detenemos el evento para que no se propague a la tarjeta.
-            e.stopPropagation(); 
-            const message = velocityEmoji.dataset.tooltip;
-            showToast(message, 'info');
-            return; // Salimos de la función para no hacer más comprobaciones.
-        }
-
-        // 2. Si no se tocó el emoji, continuamos con el resto de las comprobaciones.
         const categoryCard = e.target.closest('.category-item');
-        if (categoryCard) {
-            toggleCategoryDetails(categoryCard);
-            return;
-        }
+        if (categoryCard) return toggleCategoryDetails(categoryCard);
 
-        // --- FIN DE LA CORRECCIÓN (el resto de la función sigue igual) ---
-        
         const reportCategoryItem = e.target.closest('.report-category-item');
         if (reportCategoryItem) return handleReportCategoryClick(reportCategoryItem);
         
@@ -112,22 +94,36 @@ function initRouter() {
             return openModal(null, historicalDate.toISOString());
         }
 
+        // ✅ INICIO DE LA CORRECCIÓN: Lógica de archivado con comprobación de error
         const archiveBtn = e.target.closest('#archive-month-btn');
         if (archiveBtn) {
             const { year, month } = archiveBtn.dataset;
             if (confirm(`¿Estás seguro de que quieres cerrar y archivar el mes ${month}/${year}? Esta acción no se puede deshacer.`)) {
                 showLoader('Archivando mes...');
                 try {
-                    await apiService.call('archiveMonth', { year, month });
-                    showToast('Mes archivado con éxito.', 'success');
-                    $('#month-selector').dispatchEvent(new Event('change'));
+                    // 1. Hacemos la llamada a la API
+                    const result = await apiService.call('archiveMonth', { year, month });
+
+                    // 2. COMPROBAMOS LA RESPUESTA
+                    if (result.status === 'success') {
+                        showToast('Mes archivado con éxito.', 'success');
+                        // Forzamos la recarga del informe para que ya no muestre los botones
+                        // Simulamos un evento 'change' en el selector
+                        const selector = $('#month-selector');
+                        if (selector) selector.dispatchEvent(new Event('change'));
+                    } else {
+                        // Si la API devuelve {"status": "error"}, mostramos el mensaje
+                        throw new Error(result.message || 'Error desconocido al archivar.');
+                    }
                 } catch (error) {
+                    // Capturamos tanto errores de red como errores lógicos
                     showToast(error.message, 'error');
                 } finally {
                     hideLoader();
                 }
             }
         }
+        // ✅ FIN DE LA CORRECCIÓN
     });
 }
 
