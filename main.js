@@ -60,7 +60,7 @@ function updateState(data) {
     if (data.monthlyExpenses) state.monthlyExpenses = data.monthlyExpenses;
 }
 
-const router = { dashboard: renderDashboardView, gastos: renderGastosView, informes: renderInformesView, huchas: renderHuchasView };
+const router = { dashboard: renderDashboardView, gastos: renderGastosView, informes: renderInformesView, invertir: renderInvertirView };
 
 function navigateTo(view) {
     state.currentView = view;
@@ -123,10 +123,7 @@ function initRouter() {
                 }
             }
         }
-        const assistantBtn = e.target.closest('#open-investment-assistant');
-        if (assistantBtn) {
-            return openInvestmentAssistant();
-        }
+
         // ✅ FIN DE LA CORRECCIÓN
     });
 }
@@ -182,7 +179,7 @@ function setupGlobalEventListeners() {
     }, { passive: true });
 }
 
-// main.js -> REEMPLAZA tu función renderDashboardView por esta
+// main.js -> REEMPLAZA tu función renderDashboardView
 function renderDashboardView() {
     // 1. Obtenemos los datos del estado (state)
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
@@ -204,13 +201,6 @@ function renderDashboardView() {
                 ${state.lastActionInfo ? ` - ${state.lastActionInfo}` : ''}
             </div>
             <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">🔄 Refrescar</button>
-        </div>
-
-        <div class="bg-white p-4 rounded-lg shadow mb-4 text-center">
-            <h2 class="text-lg font-semibold text-gray-700 mb-3">¿Acabas de cobrar?</h2>
-            <button id="open-investment-assistant" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition">
-                🚀 Abrir Asistente de Inversión
-            </button>
         </div>
 
         <div class="p-4 bg-white rounded-lg shadow mb-4">
@@ -462,29 +452,124 @@ function checkBudgetWarnings() {
 }
 
 
-// main.js -> Reemplaza la función
-async function renderHuchasView() {
-    renderViewShell('Mis Huchas', '<div id="huchas-container" class="space-y-4"><div class="text-center text-gray-400 animate-pulse">Cargando...</div></div>');
+// main.js -> REEMPLAZA tu antigua 'renderHuchasView' por esta
+/**
+ * Renderiza la nueva vista "Invertir", que es el Asistente de Inversión.
+ */
+async function renderInvertirView() {
+    // 1. Dibuja el esqueleto y el loader
+    renderViewShell('Asistente de Inversión', `
+        <div id="investment-assistant-container" class="space-y-6">
+            <div class="h-48 flex justify-center items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>
+            </div>
+        </div>
+    `);
 
-    // Si no tenemos los datos de las huchas, los pedimos
-    if (!state.huchas || state.huchas.length === 0) {
-        try {
-            const result = await apiService.call('getSheetData', { sheetName: 'Huchas' });
-            if (result.status === 'success') {
-                state.huchas = result.data.processedData;
+    // 2. Llama a la API para obtener los datos
+    try {
+        const result = await apiService.call('getInvestmentAssistantData');
+        if (result.status !== 'success') throw new Error(result.message);
+
+        const data = result.data;
+        const formatOptions = { style: 'currency', currency: 'EUR' };
+        const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
+
+        const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
+        const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
+
+        // 3. Dibuja la interfaz completa del asistente
+        const container = $('#investment-assistant-container');
+        container.innerHTML = `
+            <form id="investment-assistant-form" class="space-y-6">
+                
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">1. Cierre de ${mesActual}</h2>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <p class="text-sm text-gray-600">${textoAhorro} (Sobrante)</p>
+                        <p class="text-3xl font-bold ${colorAhorro}">
+                            ${(ahorroExtraMesActual).toLocaleString('es-ES', formatOptions)}
+                        </p>
+                        <p class="text-sm text-gray-500">(Presupuesto - Gasto Real del mes)</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">2. Planifica tu Nuevo Mes</h2>
+                    <div class="bg-white p-4 rounded-lg shadow space-y-4">
+                        <div>
+                            <label for="sueldo-input" class="block text-sm font-medium text-gray-700">Introduce tu Sueldo</label>
+                            <input type="text" inputmode="decimal" id="sueldo-input" class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 1915.50">
+                        </div>
+                        <button type="submit" id="calculate-plan-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">
+                            Calcular Plan
+                        </button>
+                    </div>
+                </div>
+
+                <input type="hidden" id="data-ahorro-extra" value="${ahorroExtraMesActual}">
+                <input type="hidden" id="data-presupuesto-proximo" value="${presupuestoTotalProximoMes}">
+            </form>
+
+            <div>
+                <h2 class="text-lg font-semibold text-gray-700 mb-2">3. Tu Plan de Inversión</h2>
+                <div id="investment-plan-results" class="bg-white p-4 rounded-lg shadow text-center text-gray-500">
+                    <p>Introduce tu sueldo para calcular tu plan.</p>
+                </div>
+            </div>
+        `;
+        
+        // 4. Añadimos el listener al formulario que acabamos de crear
+        $('#investment-assistant-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            // Reutilizamos la lógica de 'handleInvestmentPlanSubmit'
+            // pero adaptada a esta vista (sin dataset en el form)
+            const formatOptions = { style: 'currency', currency: 'EUR' };
+            const presupuestoProximoMes = parseFloat($('#data-presupuesto-proximo').value);
+            const ahorroExtra = parseFloat($('#data-ahorro-extra').value);
+            const sueldo = parseFloat($('#sueldo-input').value.replace(',', '.'));
+
+            if (isNaN(sueldo) || sueldo <= 0) {
+                showToast('Por favor, introduce un sueldo válido.', 'error');
+                return;
             }
-        } catch (error) {
-            showToast('No se pudieron cargar las huchas.', 'error');
-        }
-    }
 
-    const container = $('#huchas-container');
-    let totalHuchas = 0;
-    container.innerHTML = (state.huchas || []).map(hucha => {
-        totalHuchas += hucha.monto || 0;
-        return `<div class="bg-white p-4 rounded-lg shadow"><p class="font-bold text-lg">${hucha.proposito}</p><p class="text-2xl text-green-600 font-semibold">${(hucha.monto || 0).toLocaleString('es-ES',{style:'currency',currency:'EUR'})}</p><p class="text-sm text-gray-500">En: ${hucha.donde}</p></div>`;
-    }).join('');
-    container.insertAdjacentHTML('afterbegin', `<div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg shadow mb-6"><p class="font-bold">Total Ahorrado</p><p class="text-3xl">${totalHuchas.toLocaleString('es-ES',{style:'currency','currency':'EUR'})}</p></div>`);
+            const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
+            const inversionCortoPlazo = ahorroExtra;
+            const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
+
+            const resultsContainer = $('#investment-plan-results');
+            resultsContainer.innerHTML = `
+                <div class="space-y-3 mt-3">
+                    <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <div>
+                            <p class="font-semibold text-blue-800">1. Inversión Mediana/Largo Plazo</p>
+                            <p class="text-sm text-blue-600">(Sueldo - Presupuesto)</p>
+                        </div>
+                        <p class="text-xl font-bold text-blue-800">${inversionMedianoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                    
+                    <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <div>
+                            <p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p>
+                            <p class="text-sm text-green-600">(Tu Ahorro Extra del mes)</p>
+                        </div>
+                        <p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+
+                    <div class="flex justify-between items-center p-4 bg-gray-800 text-white rounded-lg mt-2">
+                        <p class="text-lg font-bold">Total a Mover Hoy:</p>
+                        <p class="text-2xl font-bold">${totalAInvertir.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                </div>
+            `;
+        });
+
+    } catch (error) {
+        $('#investment-assistant-container').innerHTML = `<p class="text-center text-red-500 py-8">Error al cargar el asistente: ${error.message}</p>`;
+        showToast(error.message, 'error');
+    }
 }
 
 function renderViewShell(title, content) {
@@ -1308,142 +1393,7 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
-// main.js -> AÑADE estas dos nuevas funciones al final
-
-/**
- * Llama a la API para obtener los datos del asistente y luego abre el modal.
- */
-async function openInvestmentAssistant() {
-    showLoader('Cargando datos del asistente...');
-    try {
-        const result = await apiService.call('getInvestmentAssistantData');
-        if (result.status === 'success') {
-            const data = result.data;
-            // Usamos el modal de gastos existente, pero con contenido personalizado
-            $('#expense-modal').classList.remove('hidden');
-            renderInvestmentAssistant(data);
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (error) {
-        showToast(error.message, 'error');
-    } finally {
-        hideLoader();
-    }
-}
-
-/**
- * Dibuja la interfaz del asistente dentro del modal.
- */
-function renderInvestmentAssistant(data) {
-    const formatOptions = { style: 'currency', currency: 'EUR' };
-    const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
-    
-    const form = $('#expense-form'); // Reutilizamos el formulario del modal
-    form.dataset.presupuestoProximoMes = presupuestoTotalProximoMes;
-    form.dataset.ahorroExtra = ahorroExtraMesActual;
-
-    const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
-    const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
-
-    form.innerHTML = `
-        <h3 class="text-xl font-semibold mb-4">🚀 Asistente de Inversión</h3>
-        
-        <div class="mb-4 p-3 bg-gray-100 rounded-lg">
-            <p class="text-sm text-gray-600">Cierre del mes de ${mesActual}:</p>
-            <p class="text-2xl font-bold ${colorAhorro}">
-                ${(ahorroExtraMesActual).toLocaleString('es-ES', formatOptions)}
-            </p>
-            <p class="text-sm text-gray-600">(${textoAhorro} = Presupuesto - Gasto Real)</p>
-        </div>
-
-        <div class="mb-4">
-            <label for="sueldo-input" class="block text-sm font-medium text-gray-700">Introduce tu Sueldo</label>
-            <input type="text" inputmode="decimal" id="sueldo-input" class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 1915.50">
-        </div>
-
-        <button type="submit" id="modal-save-button" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md">Calcular Plan</button>
-        
-        <div id="investment-plan-results" class="mt-4"></div>
-
-        <div class="flex justify-end mt-6">
-            <button type="button" id="modal-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cerrar</button>
-        </div>
-    `;
-
-    // Re-asignamos los listeners del modal
-    form.removeEventListener('submit', handleFormSubmit); // Quitamos el listener de 'Añadir Gasto'
-    form.addEventListener('submit', handleInvestmentPlanSubmit); // Añadimos el nuevo listener
-    
-    $('#modal-cancel-button').addEventListener('click', () => {
-        closeModal();
-        form.removeEventListener('submit', handleInvestmentPlanSubmit); // Limpiamos
-        form.addEventListener('submit', handleFormSubmit); // Re-asignamos el original
-    });
-}
 
 
 
 
-// main.js -> AÑADE esta nueva función al final
-
-/**
- * Se ejecuta al enviar el formulario del asistente.
- * Calcula y muestra el plan de inversión.
- */
-function handleInvestmentPlanSubmit(e) {
-    e.preventDefault();
-    const form = e.target;
-    const formatOptions = { style: 'currency', currency: 'EUR' };
-
-    // Obtenemos los datos guardados
-    const presupuestoProximoMes = parseFloat(form.dataset.presupuestoProximoMes);
-    const ahorroExtra = parseFloat(form.dataset.ahorroExtra);
-    
-    // Obtenemos el sueldo del input
-    const sueldoInput = $('#sueldo-input').value.replace(',', '.');
-    const sueldo = parseFloat(sueldoInput);
-
-    if (isNaN(sueldo) || sueldo <= 0) {
-        showToast('Por favor, introduce un sueldo válido.', 'error');
-        return;
-    }
-
-    // 1. Inversión Mediano Plazo (Plan)
-    const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
-    
-    // 2. Inversión Corto Plazo (Buffer)
-    // Usamos el 'ahorroExtra' que ya calculamos
-    const inversionCortoPlazo = ahorroExtra;
-
-    // 3. Monto total a mover
-    const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
-
-    // Mostramos los resultados
-    const resultsContainer = $('#investment-plan-results');
-    resultsContainer.innerHTML = `
-        <h4 class="text-lg font-semibold text-gray-800 border-b pb-2">Tu Plan de Inversión</h4>
-        <div class="space-y-3 mt-3">
-            <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                <div>
-                    <p class="font-semibold text-blue-800">1. Inversión Mediana/Largo Plazo</p>
-                    <p class="text-sm text-blue-600">(Sueldo - Presupuesto)</p>
-                </div>
-                <p class="text-xl font-bold text-blue-800">${inversionMedianoPlazo.toLocaleString('es-ES', formatOptions)}</p>
-            </div>
-            
-            <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                <div>
-                    <p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p>
-                    <p class="text-sm text-green-600">(Tu Ahorro Extra del mes)</p>
-                </div>
-                <p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p>
-            </div>
-
-            <div class="flex justify-between items-center p-4 bg-gray-800 text-white rounded-lg mt-2">
-                <p class="text-lg font-bold">Total a Mover Hoy:</p>
-                <p class="text-2xl font-bold">${totalAInvertir.toLocaleString('es-ES', formatOptions)}</p>
-            </div>
-        </div>
-    `;
-}
