@@ -186,10 +186,7 @@ function renderDashboardView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
     const totalPercent = totalData.presupuesto ? (totalData.llevagastadoenelmes / totalData.presupuesto) * 100 : 0;
     
-    // Datos para la tarjeta de Potencial de Inversión
-    const investmentPotential = state.investmentPotential || 0;
-    const totalIncome = state.totalIncome || 0;
-    const investmentColor = investmentPotential >= 0 ? 'text-green-600' : 'text-red-600';
+    // ✅ VARIABLES DE INVERSIÓN ELIMINADAS DE AQUÍ
 
     // 2. Construimos el HTML del Dashboard
     const dashboardHTML = `
@@ -203,14 +200,6 @@ function renderDashboardView() {
             <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">🔄 Refrescar</button>
         </div>
 
-        <div class="p-4 bg-white rounded-lg shadow mb-4">
-            <p class="text-lg font-semibold text-gray-600">Potencial de Inversión (Plan)</p>
-            <div class="text-4xl font-bold ${investmentColor}">${(investmentPotential).toLocaleString('es-ES', formatOptions)}</div>
-            <p class="mt-2 text-sm text-gray-500">
-                ${(totalIncome).toLocaleString('es-ES', formatOptions)} (Ingresos) - ${(totalData.presupuesto || 0).toLocaleString('es-ES', formatOptions)} (Gastos)
-            </p>
-        </div>
-        
         <div class="p-4 bg-white rounded-lg shadow mb-4">
             <p class="text-lg font-semibold text-gray-600">Gasto total del mes</p>
             <div class="flex items-baseline space-x-4">
@@ -451,8 +440,7 @@ function checkBudgetWarnings() {
     });
 }
 
-
-// main.js -> REEMPLAZA tu antigua 'renderHuchasView' por esta
+// main.js -> REEMPLAZA tu función 'renderInvertirView' (que antes era renderHuchasView)
 /**
  * Renderiza la nueva vista "Invertir", que es el Asistente de Inversión.
  */
@@ -523,8 +511,6 @@ async function renderInvertirView() {
         $('#investment-assistant-form').addEventListener('submit', (e) => {
             e.preventDefault();
             
-            // Reutilizamos la lógica de 'handleInvestmentPlanSubmit'
-            // pero adaptada a esta vista (sin dataset en el form)
             const formatOptions = { style: 'currency', currency: 'EUR' };
             const presupuestoProximoMes = parseFloat($('#data-presupuesto-proximo').value);
             const ahorroExtra = parseFloat($('#data-ahorro-extra').value);
@@ -535,8 +521,14 @@ async function renderInvertirView() {
                 return;
             }
 
+            // ✅ INICIO DE LA MODIFICACIÓN
+            const bufferColchon = 100; // Tu colchón de 100€
+            
             const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
-            const inversionCortoPlazo = ahorroExtra;
+            // Restamos el colchón al ahorro extra
+            const inversionCortoPlazo = ahorroExtra - bufferColchon; 
+            
+            // El total a mover ahora excluye el colchón
             const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
 
             const resultsContainer = $('#investment-plan-results');
@@ -553,7 +545,7 @@ async function renderInvertirView() {
                     <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
                         <div>
                             <p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p>
-                            <p class="text-sm text-green-600">(Tu Ahorro Extra del mes)</p>
+                            <p class="text-sm text-green-600">(Ahorro Extra - ${bufferColchon.toLocaleString('es-ES', formatOptions)} Colchón)</p>
                         </div>
                         <p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p>
                     </div>
@@ -564,6 +556,7 @@ async function renderInvertirView() {
                     </div>
                 </div>
             `;
+            // ✅ FIN DE LA MODIFICACIÓN
         });
 
     } catch (error) {
@@ -571,6 +564,7 @@ async function renderInvertirView() {
         showToast(error.message, 'error');
     }
 }
+
 
 function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
