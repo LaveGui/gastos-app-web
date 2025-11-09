@@ -123,6 +123,10 @@ function initRouter() {
                 }
             }
         }
+        const assistantBtn = e.target.closest('#open-investment-assistant');
+        if (assistantBtn) {
+            return openInvestmentAssistant();
+        }
         // ✅ FIN DE LA CORRECCIÓN
     });
 }
@@ -178,13 +182,19 @@ function setupGlobalEventListeners() {
     }, { passive: true });
 }
 
+// main.js -> REEMPLAZA tu función renderDashboardView por esta
 function renderDashboardView() {
-    // Protecciones por si el state.totalSummary no está definido aún
+    // 1. Obtenemos los datos del estado (state)
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
     const totalPercent = totalData.presupuesto ? (totalData.llevagastadoenelmes / totalData.presupuesto) * 100 : 0;
+    
+    // Datos para la tarjeta de Potencial de Inversión
+    const investmentPotential = state.investmentPotential || 0;
+    const totalIncome = state.totalIncome || 0;
+    const investmentColor = investmentPotential >= 0 ? 'text-green-600' : 'text-red-600';
 
-    // HTML principal (usamos renderViewShell para mantener consistencia con el resto del app)
+    // 2. Construimos el HTML del Dashboard
     const dashboardHTML = `
         <div class="flex items-center justify-between mb-2">
             <div id="last-updated" class="text-xs text-gray-400">
@@ -196,6 +206,21 @@ function renderDashboardView() {
             <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">🔄 Refrescar</button>
         </div>
 
+        <div class="bg-white p-4 rounded-lg shadow mb-4 text-center">
+            <h2 class="text-lg font-semibold text-gray-700 mb-3">¿Acabas de cobrar?</h2>
+            <button id="open-investment-assistant" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition">
+                🚀 Abrir Asistente de Inversión
+            </button>
+        </div>
+
+        <div class="p-4 bg-white rounded-lg shadow mb-4">
+            <p class="text-lg font-semibold text-gray-600">Potencial de Inversión (Plan)</p>
+            <div class="text-4xl font-bold ${investmentColor}">${(investmentPotential).toLocaleString('es-ES', formatOptions)}</div>
+            <p class="mt-2 text-sm text-gray-500">
+                ${(totalIncome).toLocaleString('es-ES', formatOptions)} (Ingresos) - ${(totalData.presupuesto || 0).toLocaleString('es-ES', formatOptions)} (Gastos)
+            </p>
+        </div>
+        
         <div class="p-4 bg-white rounded-lg shadow mb-4">
             <p class="text-lg font-semibold text-gray-600">Gasto total del mes</p>
             <div class="flex items-baseline space-x-4">
@@ -215,10 +240,10 @@ function renderDashboardView() {
         </div>
     `;
 
-    // Usa la función compartida para pintar la vista
+    // 3. Renderizamos el esqueleto
     renderViewShell('Dashboard', dashboardHTML);
 
-    // Añade el listener al botón de refrescar (si existe)
+    // 4. Añadimos el listener para el botón de refrescar
     const refreshBtn = document.getElementById('refresh-dashboard');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
@@ -227,7 +252,7 @@ function renderDashboardView() {
         });
     }
 
-    // Pinta la lista de presupuestos (si hay datos)
+    // 5. Pintamos los componentes hijos (lista y gráfico)
     try {
         if (state.categories && state.categories.length > 0) {
             updateBudgetList(state.categories);
@@ -236,9 +261,7 @@ function renderDashboardView() {
             if (list) list.innerHTML = `<div class="text-center text-gray-400 animate-pulse">Cargando presupuestos...</div>`;
         }
 
-        // Si existe una función de gráfico, intenta crear el gráfico con datos
         if (typeof createDistributionChart === 'function' && document.getElementById('distribution-chart')) {
-            // pasar las categorías con valor > 0
             const chartData = (state.categories || []).filter(c => (c.llevagastadoenelmes || 0) > 0);
             if (chartData.length > 0) {
                 document.getElementById('distribution-chart').classList.remove('hidden');
@@ -254,10 +277,9 @@ function renderDashboardView() {
         console.warn('Error pintando dashboard (no crítico):', err);
     }
 
-    // Actualiza el texto de "Última actualización" (si ya venía en state)
+    // 6. Actualizamos la hora de la última acción
     updateLastUpdatedTime(state.lastActionInfo || '');
 }
-
 
 // main.js -> REEMPLAZA esta función para usar atributos de datos en vez de 'title'
 function updateBudgetList(categories) {
@@ -562,8 +584,7 @@ function populateMonthSelector() {
     });
 }
 
-
-// main.js -> REEMPLAZA esta función
+// main.js -> REEMPLAZA tu función handleMonthSelection
 async function handleMonthSelection(e) {
     const value = e.target.value;
     const container = $('#monthly-analysis-content');
@@ -578,8 +599,13 @@ async function handleMonthSelection(e) {
 
     try {
         const result = await apiService.call('getMonthlyAnalysis', { year, month });
+
+        // ✅ ¡AQUÍ ESTÁ LA PISTA!
+        // Esto imprimirá el objeto de depuración en tu consola.
+        console.log('🕵️‍♂️ Pista de la API (getMonthlyAnalysis):', result);
+        
         if (result.status === 'success') {
-            renderMonthlyAnalysisReport(result.data, year, month); // Pasamos year y month para futuras acciones
+            renderMonthlyAnalysisReport(result.data, year, month);
         } else {
             container.innerHTML = `<p class="text-center text-red-500 py-8">${result.message || 'No se encontraron datos para este mes.'}</p>`;
         }
@@ -1280,4 +1306,144 @@ function injectStyles() {
         .category-item.is-open .category-details-container { max-height: 500px; }
     `;
     document.head.appendChild(style);
+}
+
+// main.js -> AÑADE estas dos nuevas funciones al final
+
+/**
+ * Llama a la API para obtener los datos del asistente y luego abre el modal.
+ */
+async function openInvestmentAssistant() {
+    showLoader('Cargando datos del asistente...');
+    try {
+        const result = await apiService.call('getInvestmentAssistantData');
+        if (result.status === 'success') {
+            const data = result.data;
+            // Usamos el modal de gastos existente, pero con contenido personalizado
+            $('#expense-modal').classList.remove('hidden');
+            renderInvestmentAssistant(data);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        showToast(error.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
+
+/**
+ * Dibuja la interfaz del asistente dentro del modal.
+ */
+function renderInvestmentAssistant(data) {
+    const formatOptions = { style: 'currency', currency: 'EUR' };
+    const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
+    
+    const form = $('#expense-form'); // Reutilizamos el formulario del modal
+    form.dataset.presupuestoProximoMes = presupuestoTotalProximoMes;
+    form.dataset.ahorroExtra = ahorroExtraMesActual;
+
+    const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
+    const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
+
+    form.innerHTML = `
+        <h3 class="text-xl font-semibold mb-4">🚀 Asistente de Inversión</h3>
+        
+        <div class="mb-4 p-3 bg-gray-100 rounded-lg">
+            <p class="text-sm text-gray-600">Cierre del mes de ${mesActual}:</p>
+            <p class="text-2xl font-bold ${colorAhorro}">
+                ${(ahorroExtraMesActual).toLocaleString('es-ES', formatOptions)}
+            </p>
+            <p class="text-sm text-gray-600">(${textoAhorro} = Presupuesto - Gasto Real)</p>
+        </div>
+
+        <div class="mb-4">
+            <label for="sueldo-input" class="block text-sm font-medium text-gray-700">Introduce tu Sueldo</label>
+            <input type="text" inputmode="decimal" id="sueldo-input" class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 1915.50">
+        </div>
+
+        <button type="submit" id="modal-save-button" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md">Calcular Plan</button>
+        
+        <div id="investment-plan-results" class="mt-4"></div>
+
+        <div class="flex justify-end mt-6">
+            <button type="button" id="modal-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cerrar</button>
+        </div>
+    `;
+
+    // Re-asignamos los listeners del modal
+    form.removeEventListener('submit', handleFormSubmit); // Quitamos el listener de 'Añadir Gasto'
+    form.addEventListener('submit', handleInvestmentPlanSubmit); // Añadimos el nuevo listener
+    
+    $('#modal-cancel-button').addEventListener('click', () => {
+        closeModal();
+        form.removeEventListener('submit', handleInvestmentPlanSubmit); // Limpiamos
+        form.addEventListener('submit', handleFormSubmit); // Re-asignamos el original
+    });
+}
+
+
+
+
+// main.js -> AÑADE esta nueva función al final
+
+/**
+ * Se ejecuta al enviar el formulario del asistente.
+ * Calcula y muestra el plan de inversión.
+ */
+function handleInvestmentPlanSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formatOptions = { style: 'currency', currency: 'EUR' };
+
+    // Obtenemos los datos guardados
+    const presupuestoProximoMes = parseFloat(form.dataset.presupuestoProximoMes);
+    const ahorroExtra = parseFloat(form.dataset.ahorroExtra);
+    
+    // Obtenemos el sueldo del input
+    const sueldoInput = $('#sueldo-input').value.replace(',', '.');
+    const sueldo = parseFloat(sueldoInput);
+
+    if (isNaN(sueldo) || sueldo <= 0) {
+        showToast('Por favor, introduce un sueldo válido.', 'error');
+        return;
+    }
+
+    // 1. Inversión Mediano Plazo (Plan)
+    const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
+    
+    // 2. Inversión Corto Plazo (Buffer)
+    // Usamos el 'ahorroExtra' que ya calculamos
+    const inversionCortoPlazo = ahorroExtra;
+
+    // 3. Monto total a mover
+    const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
+
+    // Mostramos los resultados
+    const resultsContainer = $('#investment-plan-results');
+    resultsContainer.innerHTML = `
+        <h4 class="text-lg font-semibold text-gray-800 border-b pb-2">Tu Plan de Inversión</h4>
+        <div class="space-y-3 mt-3">
+            <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                <div>
+                    <p class="font-semibold text-blue-800">1. Inversión Mediana/Largo Plazo</p>
+                    <p class="text-sm text-blue-600">(Sueldo - Presupuesto)</p>
+                </div>
+                <p class="text-xl font-bold text-blue-800">${inversionMedianoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+            </div>
+            
+            <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                <div>
+                    <p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p>
+                    <p class="text-sm text-green-600">(Tu Ahorro Extra del mes)</p>
+                </div>
+                <p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+            </div>
+
+            <div class="flex justify-between items-center p-4 bg-gray-800 text-white rounded-lg mt-2">
+                <p class="text-lg font-bold">Total a Mover Hoy:</p>
+                <p class="text-2xl font-bold">${totalAInvertir.toLocaleString('es-ES', formatOptions)}</p>
+            </div>
+        </div>
+    `;
 }
