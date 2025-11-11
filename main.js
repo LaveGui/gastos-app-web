@@ -1328,7 +1328,11 @@ async function loadInvestmentAssistant() {
         const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
 
         // ✅ --- INICIO DE LA CORRECCIÓN ---
-        // Ponemos el H2 (título) y el space-y-6 aquí dentro.
+        // Limpiamos las clases CSS del loader (h-48, flex, etc.)
+        // para que el contenedor ocupe su espacio natural.
+        container.className = '';
+        // ✅ --- FIN DE LA CORRECCIÓN ---
+
         container.innerHTML = `
          <div class="space-y-6">
             <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación</h2>
@@ -1362,7 +1366,7 @@ async function loadInvestmentAssistant() {
                 </div>
             </div>
         </div> 
-        `; // ✅ --- FIN DE LA CORRECCIÓN ---
+        `; 
         
         // 4. Añadimos el listener al formulario
         $('#investment-assistant-form').addEventListener('submit', (e) => { 
