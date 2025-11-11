@@ -1360,7 +1360,7 @@ async function loadInvestmentAssistant() {
         `;
         
         // 4. Añadimos el listener al formulario
-        ('#investment-assistant-form').addEventListener('submit', (e) => { 
+        $('#investment-assistant-form').addEventListener('submit', (e) => { 
             e.preventDefault();
             const formatOptions = { style: 'currency', currency: 'EUR' };
             const presupuestoProximoMes = parseFloat($('#data-presupuesto-proximo').value);
