@@ -93,7 +93,11 @@ function initRouter() {
             const historicalDate = new Date(year, month - 1, 15);
             return openModal(null, historicalDate.toISOString());
         }
-
+        const openSnapshotBtn = e.target.closest('#open-snapshot-modal-btn');
+        if (openSnapshotBtn) {
+            return openInvestmentSnapshotModal();
+        }
+        
         // ✅ INICIO DE LA CORRECCIÓN: Lógica de archivado con comprobación de error
         const archiveBtn = e.target.closest('#archive-month-btn');
         if (archiveBtn) {
@@ -126,6 +130,13 @@ function initRouter() {
 
         // ✅ FIN DE LA CORRECCIÓN
     });
+    $('#snapshot-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'snapshot-cancel-button') {
+            closeInvestmentSnapshotModal();
+        }
+    });
+    $('#snapshot-form').addEventListener('submit', handleInvestmentSnapshotSubmit);
+
 }
 
 function updateActiveNav(activeView) {
@@ -1387,7 +1398,249 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
+// main.js -> REEMPLAZA tu función 'renderInvertirView' por esta
+/**
+ * Renderiza la vista "Invertir", que ahora incluye:
+ * 1. El Asistente de Inversión (Planificación)
+ * 2. El Dashboard de Inversión (Snapshots)
+ */
+async function renderInvertirView() {
+    // 1. Dibuja el esqueleto y el loader
+    renderViewShell('Invertir', `
+        <div id="investment-assistant-container" class="space-y-6">
+            <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación</h2>
+            <div id="assistant-content" class="h-48 flex justify-center items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>
+            </div>
+        </div>
+        
+        <hr class="my-8 border-t-2 border-gray-200">
+        
+        <div id="investment-dashboard-container" class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-semibold text-gray-800">2. Mis Inversiones (Snapshots)</h2>
+                <button id="open-snapshot-modal-btn" class="bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition">
+                    + Añadir Snapshot
+                </button>
+            </div>
+            <div id="dashboard-content" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="text-center text-gray-400 animate-pulse col-span-2">Cargando datos de inversión...</div>
+            </div>
+        </div>
+    `);
+
+    // 2. Carga AMBAS partes en paralelo
+    loadInvestmentAssistant();
+    loadInvestmentDashboard();
+}
+
+/**
+ * AÑADE ESTA NUEVA FUNCIÓN
+ * Carga los datos del Asistente (lo que ya tenías)
+ */
+async function loadInvestmentAssistant() {
+    const container = $('#assistant-content');
+    try {
+        const result = await apiService.call('getInvestmentAssistantData'); 
+        if (result.status !== 'success') throw new Error(result.message);
+
+        const data = result.data;
+        const formatOptions = { style: 'currency', currency: 'EUR' };
+        const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data; 
 
 
+        const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
+        const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
 
+        container.innerHTML = `
+            <form id="investment-assistant-form" class="w-full space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Cierre de ${mesActual}</h3>
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <p class="text-sm text-gray-600">${textoAhorro} (Sobrante)</p>
+                        <p class="text-3xl font-bold ${colorAhorro}">${(ahorroExtraMesActual).toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Planifica tu Nuevo Mes</h3>
+                    <div class="bg-white p-4 rounded-lg shadow space-y-4">
+                        <div>
+                            <label for="sueldo-input" class="block text-sm font-medium text-gray-700">Introduce tu Sueldo</label>
+                            <input type="text" inputmode="decimal" id="sueldo-input" class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 1915.50">
+                        </div>
+                        <button type="submit" id="calculate-plan-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Calcular Plan</button>
+                    </div>
+                </div>
+                <input type="hidden" id="data-ahorro-extra" value="${ahorroExtraMesActual}">
+                <input type="hidden" id="data-presupuesto-proximo" value="${presupuestoTotalProximoMes}">
+            </form>
+            <div>
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Tu Plan de Inversión</h3>
+                <div id="investment-plan-results" class="bg-white p-4 rounded-lg shadow text-center text-gray-500">
+                    <p>Introduce tu sueldo para calcular tu plan.</p>
+                </div>
+            </div>
+        `;
+        
+        // 4. Añadimos el listener al formulario
+        ('#investment-assistant-form').addEventListener('submit', (e) => { 
+            e.preventDefault();
+            const formatOptions = { style: 'currency', currency: 'EUR' };
+            const presupuestoProximoMes = parseFloat($('#data-presupuesto-proximo').value);
+            const ahorroExtra = parseFloat($('#data-ahorro-extra').value);
+            const sueldo = parseFloat($('#sueldo-input').value.replace(',', '.'));
+            if (isNaN(sueldo) || sueldo <= 0) return showToast('Por favor, introduce un sueldo válido.', 'error');
+
+            const bufferColchon = 100;
+            const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
+            const inversionCortoPlazo = ahorroExtra - bufferColchon; 
+            const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
+            const resultsContainer = $('#investment-plan-results');
+
+            resultsContainer.innerHTML = `
+                <div class="space-y-3 mt-3">
+                    <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <div><p class="font-semibold text-blue-800">1. Inversión Mediana/Largo Plazo</p><p class="text-sm text-blue-600">(Sueldo - Presupuesto)</p></div>
+                        <p class="text-xl font-bold text-blue-800">${inversionMedianoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <div><p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p><p class="text-sm text-green-600">(Ahorro Extra - ${bufferColchon.toLocaleString('es-ES', formatOptions)} Colchón)</p></div>
+                        <p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                    <div class="flex justify-between items-center p-4 bg-gray-800 text-white rounded-lg mt-2">
+                        <p class="text-lg font-bold">Total a Mover Hoy:</p><p class="text-2xl font-bold">${totalAInvertir.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                </div>
+            `; 
+        });
+
+    } catch (error) {
+        container.innerHTML = `<p class="text-center text-red-500 py-8">Error al cargar el asistente: ${error.message}</p>`;
+    }
+}
+
+/**
+ * AÑADE ESTA NUEVA FUNCIÓN
+ * Carga los datos del Dashboard de Snapshots
+ */
+async function loadInvestmentDashboard() {
+    const container = $('#dashboard-content');
+    try {
+        const result = await apiService.call('getInvestmentDashboardData');
+        if (result.status !== 'success') throw new Error(result.message);
+        
+        // Renderiza ambas tarjetas con los datos
+        renderInvestmentCard(container, 'Mediano Plazo', result.data.medianoPlazo, 'bg-blue-50');
+        renderInvestmentCard(container, 'Corto Plazo (Buffer)', result.data.cortoPlazo, 'bg-green-50');
+        
+    } catch (error) {
+        container.innerHTML = `<p class="text-center text-red-500 py-8 col-span-2">Error al cargar el dashboard de inversión: ${error.message}</p>`;
+    }
+}
+
+/**
+ * AÑADE ESTA NUEVA FUNCIÓN
+ * Función auxiliar para pintar una tarjeta de inversión
+ */
+function renderInvestmentCard(container, title, data, bgColor) {
+    const formatOptions = { style: 'currency', currency: 'EUR' };
+    const percentOptions = { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 };
+    
+    const gananciaColor = data.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
+    const variacionColor = data.variacion >= 0 ? 'text-green-600' : 'text-red-600';
+    const variacionSign = data.variacion >= 0 ? '+' : '';
+
+    const cardHTML = `
+        <div class="bg-white p-4 rounded-lg shadow ${bgColor}">
+            <h3 class="text-lg font-semibold text-gray-700 mb-3">${title}</h3>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Valor Actual:</span>
+                    <span class="font-bold text-lg text-gray-900">${(data.valorActual).toLocaleString('es-ES', formatOptions)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Tus Aportaciones:</span>
+                    <span class="font-medium text-gray-800">${(data.aportaciones).toLocaleString('es-ES', formatOptions)}</span>
+                </div>
+                <hr class="my-2 border-gray-300">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Ganancia Neta:</span>
+                    <span class="font-bold text-lg ${gananciaColor}">${(data.gananciaNeta).toLocaleString('es-ES', formatOptions)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ROI Total:</span>
+                    <span class="font-semibold ${gananciaColor}">${(data.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
+                </div>
+                <div class="flex justify-between mt-2 pt-2 border-t border-gray-300">
+                    <span class="text-gray-600">Variación (últ. dato):</span>
+                    <span class="font-bold text-lg ${variacionColor}">${variacionSign}${(data.variacion / 100).toLocaleString('es-ES', percentOptions)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Si es la primera vez, borra el loader
+    if (container.querySelector('.animate-pulse')) {
+        container.innerHTML = cardHTML;
+    } else {
+        container.innerHTML += cardHTML;
+    }
+}
+
+// main.js -> AÑADE ESTAS 3 NUEVAS FUNCIONES AL FINAL
+
+/**
+ * Abre el modal para añadir un snapshot de inversión.
+ */
+function openInvestmentSnapshotModal() {
+    $('#snapshot-form').reset(); // Limpia el formulario
+    $('#snapshot-modal').classList.remove('hidden');
+}
+
+/**
+ * Cierra el modal de snapshot.
+ */
+function closeInvestmentSnapshotModal() {
+    $('#snapshot-modal').classList.add('hidden');
+}
+
+/**
+ * Maneja el envío del formulario de snapshot.
+ */
+async function handleInvestmentSnapshotSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const data = {
+        tipoInversion: formData.get('tipoInversion'),
+        aportaciones: parseFloat(formData.get('aportaciones').replace(',', '.')),
+        valorPortfolio: parseFloat(formData.get('valorPortfolio').replace(',', '.'))
+    };
+
+    if (isNaN(data.aportaciones) || isNaN(data.valorPortfolio)) {
+        return showToast('Por favor, introduce montos válidos.', 'error');
+    }
+
+    closeInvestmentSnapshotModal();
+    showLoader('Guardando Snapshot...');
+
+    try {
+        const result = await apiService.call('addInvestmentSnapshot', data);
+        if (result.status !== 'success') throw new Error(result.message);
+        
+        // ¡Éxito! Repintamos el dashboard de inversión con los nuevos datos
+        const container = $('#dashboard-content');
+        container.innerHTML = ''; // Limpiamos el contenido viejo
+        renderInvestmentCard(container, 'Mediano Plazo', result.data.medianoPlazo, 'bg-blue-50');
+        renderInvestmentCard(container, 'Corto Plazo (Buffer)', result.data.cortoPlazo, 'bg-green-50');
+        
+        showToast('Snapshot guardado con éxito.', 'success');
+
+    } catch (error) {
+        showToast(error.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
 

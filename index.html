@@ -83,7 +83,38 @@
                 </form>
             </div>
         </div>
-        
+        <div id="snapshot-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <form id="snapshot-form" class="p-6 space-y-4">
+            <h3 id="snapshot-modal-title" class="text-xl font-semibold mb-4">Añadir Snapshot</h3>
+            
+            <div>
+                <label for="tipoInversion" class="block text-sm font-medium text-gray-700">Tipo de Inversión</label>
+                <select id="tipoInversion" name="tipoInversion" class="mt-1 block w-full border rounded-md p-2">
+                    <option value="Mediano Plazo">Mediano Plazo</option>
+                    <option value="Corto Plazo">Corto Plazo</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="aportaciones" class="block text-sm font-medium text-gray-700">Total Aportaciones Acumuladas (€)</label>
+                <input type="text" inputmode="decimal" id="aportaciones" name="aportaciones" required class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 10000">
+                <p class="text-xs text-gray-500 mt-1">El total de dinero que TÚ has metido hasta hoy.</p>
+            </div>
+
+            <div>
+                <label for="valorPortfolio" class="block text-sm font-medium text-gray-700">Valor Actual del Portfolio (€)</label>
+                <input type="text" inputmode="decimal" id="valorPortfolio" name="valorPortfolio" required class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 11500">
+                <p class="text-xs text-gray-500 mt-1">Cuánto vale esta cartera A DÍA DE HOY.</p>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4">
+                <button type="button" id="snapshot-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cancelar</button>
+                <button type="submit" id="snapshot-save-button" class="bg-blue-600 text-white px-4 py-2 rounded-md">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
         <div id="toast-container" class="fixed top-5 right-5 z-50"></div>
     </div>
     <script src="main.js"></script>
