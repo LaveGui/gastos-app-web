@@ -1310,9 +1310,8 @@ async function renderInvertirView() {
     loadInvestmentAssistant();
     loadInvestmentDashboard();
 }
-
+// main.js -> REEMPLAZA esta función
 /**
- * AÑADE ESTA NUEVA FUNCIÓN
  * Carga los datos del Asistente (lo que ya tenías)
  */
 async function loadInvestmentAssistant() {
@@ -1323,13 +1322,17 @@ async function loadInvestmentAssistant() {
 
         const data = result.data;
         const formatOptions = { style: 'currency', currency: 'EUR' };
-        const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data; 
+        const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
 
 
         const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
         const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
 
+        // ✅ --- INICIO DE LA CORRECCIÓN ---
+        // Añadimos un 'div' contenedor con 'space-y-6' para apilar
+        // el formulario y la tarjeta de resultados.
         container.innerHTML = `
+         <div class="space-y-6">
             <form id="investment-assistant-form" class="w-full space-y-6">
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-2">Cierre de ${mesActual}</h3>
@@ -1351,13 +1354,15 @@ async function loadInvestmentAssistant() {
                 <input type="hidden" id="data-ahorro-extra" value="${ahorroExtraMesActual}">
                 <input type="hidden" id="data-presupuesto-proximo" value="${presupuestoTotalProximoMes}">
             </form>
+            
             <div>
                 <h3 class="text-lg font-semibold text-gray-700 mb-2">Tu Plan de Inversión</h3>
                 <div id="investment-plan-results" class="bg-white p-4 rounded-lg shadow text-center text-gray-500">
                     <p>Introduce tu sueldo para calcular tu plan.</p>
                 </div>
             </div>
-        `;
+        </div> 
+        `; // ✅ --- FIN DE LA CORRECCIÓN ---
         
         // 4. Añadimos el listener al formulario
         $('#investment-assistant-form').addEventListener('submit', (e) => { 
