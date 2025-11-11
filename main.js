@@ -1275,17 +1275,16 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
-// main.js -> REEMPLAZA tu función 'renderInvertirView' por esta
+// main.js -> REEMPLAZA tu función 'renderInvertirView'
 /**
- * Renderiza la vista "Invertir", que ahora incluye:
- * 1. El Asistente de Inversión (Planificación)
- * 2. El Dashboard de Inversión (Snapshots)
+ * Renderiza la vista "Invertir" (v2)
+ * Dibuja el esqueleto de las dos secciones principales.
  */
 async function renderInvertirView() {
     // 1. Dibuja el esqueleto y el loader
     renderViewShell('Invertir', `
-        <div id="investment-assistant-container" class="space-y-6">
-            <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación</h2>
+        
+        <div id="investment-assistant-container">
             <div id="assistant-content" class="h-48 flex justify-center items-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500"></div>
             </div>
@@ -1310,9 +1309,10 @@ async function renderInvertirView() {
     loadInvestmentAssistant();
     loadInvestmentDashboard();
 }
-// main.js -> REEMPLAZA esta función
+
+// main.js -> REEMPLAZA tu función 'loadInvestmentAssistant'
 /**
- * Carga los datos del Asistente (lo que ya tenías)
+ * Carga los datos y el HTML del Asistente de Planificación
  */
 async function loadInvestmentAssistant() {
     const container = $('#assistant-content');
@@ -1324,15 +1324,15 @@ async function loadInvestmentAssistant() {
         const formatOptions = { style: 'currency', currency: 'EUR' };
         const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
 
-
         const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
         const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
 
         // ✅ --- INICIO DE LA CORRECCIÓN ---
-        // Añadimos un 'div' contenedor con 'space-y-6' para apilar
-        // el formulario y la tarjeta de resultados.
+        // Ponemos el H2 (título) y el space-y-6 aquí dentro.
         container.innerHTML = `
          <div class="space-y-6">
+            <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación</h2>
+
             <form id="investment-assistant-form" class="w-full space-y-6">
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-2">Cierre de ${mesActual}</h3>
