@@ -97,6 +97,22 @@ function initRouter() {
         if (openSnapshotBtn) {
             return openInvestmentSnapshotModal();
         }
+        const groupedCard = e.target.closest('.grouped-investment-card');
+        if (groupedCard) {
+    const tipo = groupedCard.dataset.tipo;
+    const breakdown = $(`[data-breakdown-for="${tipo}"]`);
+    if (breakdown) {
+        breakdown.classList.toggle('hidden');
+        
+        // CORRECCIÓN: Usamos un nombre de variable válido (camelCase)
+        // y el selector de clase específico que acabamos de añadir.
+        const toggleText = groupedCard.querySelector('.toggle-breakdown-text'); 
+        
+        if (toggleText) {
+            toggleText.textContent = breakdown.classList.contains('hidden') ? 'Ver desglose ▼' : 'Ocultar desglose ▲';
+        }
+    }
+        }
         
         // ✅ INICIO DE LA CORRECCIÓN: Lógica de archivado con comprobación de error
         const archiveBtn = e.target.closest('#archive-month-btn');
@@ -1405,9 +1421,9 @@ async function loadInvestmentAssistant() {
     }
 }
 
+// main.js -> REEMPLAZA esta función
 /**
- * AÑADE ESTA NUEVA FUNCIÓN
- * Carga los datos del Dashboard de Snapshots
+ * Carga los datos del Dashboard de Snapshots v2.0
  */
 async function loadInvestmentDashboard() {
     const container = $('#dashboard-content');
@@ -1415,72 +1431,122 @@ async function loadInvestmentDashboard() {
         const result = await apiService.call('getInvestmentDashboardData');
         if (result.status !== 'success') throw new Error(result.message);
         
-        // Renderiza ambas tarjetas con los datos
-        renderInvestmentCard(container, 'Mediano Plazo', result.data.medianoPlazo, 'bg-blue-50');
-        renderInvestmentCard(container, 'Corto Plazo (Buffer)', result.data.cortoPlazo, 'bg-green-50');
+        // Renderiza el nuevo dashboard v2.0
+        renderInvestmentDashboardV2(result.data);
         
     } catch (error) {
         container.innerHTML = `<p class="text-center text-red-500 py-8 col-span-2">Error al cargar el dashboard de inversión: ${error.message}</p>`;
     }
 }
 
+// main.js -> AÑADE ESTA NUEVA FUNCIÓN AL FINAL
 /**
- * AÑADE ESTA NUEVA FUNCIÓN
- * Función auxiliar para pintar una tarjeta de inversión
+ * Renderiza el Dashboard de Inversión v2.0 (Tarjetas agrupadas y desglose).
+ * @param {object} data - El objeto de la API con { grouped: {...}, individual: [...] }
  */
-function renderInvestmentCard(container, title, data, bgColor) {
+function renderInvestmentDashboardV2(data) {
+    const container = $('#dashboard-content');
+    if (!container) return;
+
+    container.innerHTML = ''; // Limpiamos el loader o contenido viejo
+
     const formatOptions = { style: 'currency', currency: 'EUR' };
     const percentOptions = { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 };
-    
-    const gananciaColor = data.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
-    const variacionColor = data.variacion >= 0 ? 'text-green-600' : 'text-red-600';
-    const variacionSign = data.variacion >= 0 ? '+' : '';
 
-    const cardHTML = `
-        <div class="bg-white p-4 rounded-lg shadow ${bgColor}">
-            <h3 class="text-lg font-semibold text-gray-700 mb-3">${title}</h3>
-            <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Valor Actual:</span>
-                    <span class="font-bold text-lg text-gray-900">${(data.valorActual).toLocaleString('es-ES', formatOptions)}</span>
+    // 1. Renderizar las tarjetas AGRUPADAS
+    for (const tipo in data.grouped) {
+        const group = data.grouped[tipo];
+        const gananciaColor = group.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
+        
+        // Filtramos el desglose que pertenece a este grupo
+        const individualBreakdown = data.individual.filter(f => f.tipo === tipo);
+
+        // HTML para el desglose (inicialmente oculto)
+        const breakdownHTML = individualBreakdown.map(fondo => {
+            const fGananciaColor = fondo.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
+            const fVariacionColor = fondo.variacion >= 0 ? 'text-green-600' : 'text-red-600';
+            const fVariacionSign = fondo.variacion >= 0 ? '+' : '';
+
+            return `
+                <div class="flex justify-between items-center text-sm py-2 border-t border-gray-300">
+                    <span class="font-semibold">${fondo.fondo}</span>
+                    <div class="text-right">
+                        <span class="font-bold ${fGananciaColor}">${(fondo.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
+                        <span class="text-xs ${fVariacionColor}">(${fVariacionSign}${(fondo.variacion / 100).toLocaleString('es-ES', percentOptions)})</span>
+                    </div>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Tus Aportaciones:</span>
-                    <span class="font-medium text-gray-800">${(data.aportaciones).toLocaleString('es-ES', formatOptions)}</span>
+            `;
+        }).join('');
+
+        const cardHTML = `
+            <div class="bg-white p-4 rounded-lg shadow col-span-1">
+                <div class="grouped-investment-card cursor-pointer" data-tipo="${tipo}">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3 flex justify-between">
+                        Total ${tipo}
+                        <span class="text-blue-600 text-sm font-normal toggle-breakdown-text">Ver desglose ▼</span>
+                    </h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Valor Actual Total:</span>
+                            <span class="font-bold text-lg text-gray-900">${(group.valorActual).toLocaleString('es-ES', formatOptions)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Aportaciones Totales:</span>
+                            <span class="font-medium text-gray-800">${(group.aportaciones).toLocaleString('es-ES', formatOptions)}</span>
+                        </div>
+                        <hr class="my-2 border-gray-300">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Ganancia Neta Total:</span>
+                            <span class="font-bold text-lg ${gananciaColor}">${(group.gananciaNeta).toLocaleString('es-ES', formatOptions)}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">ROI Ponderado:</span>
+                            <span class="font-bold text-lg ${gananciaColor}">${(group.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
+                        </div>
+                    </div>
                 </div>
-                <hr class="my-2 border-gray-300">
-                <div class="flex justify-between">
-                    <span class="text-gray-600">Ganancia Neta:</span>
-                    <span class="font-bold text-lg ${gananciaColor}">${(data.gananciaNeta).toLocaleString('es-ES', formatOptions)}</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-600">ROI Total:</span>
-                    <span class="font-semibold ${gananciaColor}">${(data.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
-                </div>
-                <div class="flex justify-between mt-2 pt-2 border-t border-gray-300">
-                    <span class="text-gray-600">Variación (últ. dato):</span>
-                    <span class="font-bold text-lg ${variacionColor}">${variacionSign}${(data.variacion / 100).toLocaleString('es-ES', percentOptions)}</span>
+
+                <div class="investment-breakdown hidden mt-4 pt-2" data-breakdown-for="${tipo}">
+                    <h4 class="font-bold text-gray-600 mb-1">Desglose Individual</h4>
+                    ${breakdownHTML || '<p class="text-sm text-gray-500">Sin datos.</p>'}
                 </div>
             </div>
-        </div>
-    `;
-    
-    // Si es la primera vez, borra el loader
-    if (container.querySelector('.animate-pulse')) {
-        container.innerHTML = cardHTML;
-    } else {
+        `;
         container.innerHTML += cardHTML;
+    }
+    
+    // Si no hay datos, mostramos un mensaje
+    if (container.innerHTML === '') {
+        container.innerHTML = `<p class="text-center text-gray-500 col-span-2">Aún no has añadido ningún snapshot. ¡Empieza con el botón "+ Añadir Snapshot"!</p>`;
     }
 }
 
-// main.js -> AÑADE ESTAS 3 NUEVAS FUNCIONES AL FINAL
-
+// main.js -> REEMPLAZA esta función
 /**
- * Abre el modal para añadir un snapshot de inversión.
+ * Abre el modal para añadir un snapshot (v2.0).
+ * Ahora carga dinámicamente los fondos desde la API.
  */
-function openInvestmentSnapshotModal() {
+async function openInvestmentSnapshotModal() {
     $('#snapshot-form').reset(); // Limpia el formulario
+    const select = $('#fondo-select');
+    select.innerHTML = '<option value="">Cargando fondos...</option>'; // Pone el loader
     $('#snapshot-modal').classList.remove('hidden');
+
+    try {
+        const result = await apiService.call('getInvestmentConfig');
+        if (result.status !== 'success' || !result.data || result.data.length === 0) {
+            throw new Error('No se encontraron fondos. Revisa la hoja "Fondos_Config".');
+        }
+
+        // Rellena el select con los fondos de tu hoja
+        select.innerHTML = result.data
+            .map(fondo => `<option value="${fondo.nombre}">${fondo.nombre} (${fondo.tipo})</option>`)
+            .join('');
+
+    } catch (error) {
+        showToast(error.message, 'error');
+        select.innerHTML = '<option value="">Error al cargar fondos</option>';
+    }
 }
 
 /**
@@ -1490,8 +1556,10 @@ function closeInvestmentSnapshotModal() {
     $('#snapshot-modal').classList.add('hidden');
 }
 
+// main.js -> REEMPLAZA esta función
 /**
- * Maneja el envío del formulario de snapshot.
+ * Maneja el envío del formulario de snapshot (v2.0).
+ * Envía 'fondo' y repinta el dashboard agrupado.
  */
 async function handleInvestmentSnapshotSubmit(e) {
     e.preventDefault();
@@ -1499,11 +1567,14 @@ async function handleInvestmentSnapshotSubmit(e) {
     const formData = new FormData(form);
     
     const data = {
-        tipoInversion: formData.get('tipoInversion'),
+        fondo: formData.get('fondo'), // <-- CAMBIO
         aportaciones: parseFloat(formData.get('aportaciones').replace(',', '.')),
         valorPortfolio: parseFloat(formData.get('valorPortfolio').replace(',', '.'))
     };
 
+    if (!data.fondo) {
+        return showToast('Por favor, selecciona un fondo.', 'error');
+    }
     if (isNaN(data.aportaciones) || isNaN(data.valorPortfolio)) {
         return showToast('Por favor, introduce montos válidos.', 'error');
     }
@@ -1515,11 +1586,8 @@ async function handleInvestmentSnapshotSubmit(e) {
         const result = await apiService.call('addInvestmentSnapshot', data);
         if (result.status !== 'success') throw new Error(result.message);
         
-        // ¡Éxito! Repintamos el dashboard de inversión con los nuevos datos
-        const container = $('#dashboard-content');
-        container.innerHTML = ''; // Limpiamos el contenido viejo
-        renderInvestmentCard(container, 'Mediano Plazo', result.data.medianoPlazo, 'bg-blue-50');
-        renderInvestmentCard(container, 'Corto Plazo (Buffer)', result.data.cortoPlazo, 'bg-green-50');
+        // ¡Éxito! Repintamos el dashboard v2.0 con los nuevos datos
+        renderInvestmentDashboardV2(result.data); // Usamos la nueva función
         
         showToast('Snapshot guardado con éxito.', 'success');
 
@@ -1529,4 +1597,3 @@ async function handleInvestmentSnapshotSubmit(e) {
         hideLoader();
     }
 }
-
