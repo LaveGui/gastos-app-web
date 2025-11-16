@@ -83,34 +83,61 @@
                 </form>
             </div>
         </div>
-        <div id="snapshot-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <form id="snapshot-form" class="p-6 space-y-4">
-            <h3 id="snapshot-modal-title" class="text-xl font-semibold mb-4">Añadir Snapshot</h3>
-            
-            <div>
-                <label for="fondo-select" class="block text-sm font-medium text-gray-700">Fondo / Inversión</label>
-                <select id="fondo-select" name="fondo" required class="mt-1 block w-full border rounded-md p-2">
+        <div id="add-investment-movement-modal" class="modal-container hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="modal-content bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="modal-header flex justify-between items-center p-4 border-b">
+            <h3 class="text-xl font-semibold">Registrar Movimiento</h3>
+            <button class="modal-close text-2xl" data-modal-id="add-investment-movement-modal">&times;</button>
+        </div>
+        <form id="add-movement-form" class="p-6 space-y-4">
+            <div class="form-group">
+                <label for="movement-fecha" class="block text-sm font-medium text-gray-700">Fecha</label>
+                <input type="date" id="movement-fecha" name="fecha" required class="mt-1 block w-full border rounded-md p-2">
+            </div>
+            <div class="form-group">
+                <label for="movement-fondo-select" class="block text-sm font-medium text-gray-700">Fondo</label>
+                <select id="movement-fondo-select" name="fondo" required class="mt-1 block w-full border rounded-md p-2">
                     <option value="">Cargando fondos...</option>
                 </select>
             </div>
-            
-            <div>
-                <label for="aportaciones" class="block text-sm font-medium text-gray-700">Total Aportaciones Acumuladas (€)</label>
-                <input type="text" inputmode="decimal" id="aportaciones" name="aportaciones" required class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 10000">
-                <p class="text-xs text-gray-500 mt-1">El total de dinero que TÚ has metido hasta hoy.</p>
+            <div class="form-group">
+                <label for="movement-tipo" class="block text-sm font-medium text-gray-700">Tipo de Movimiento</label>
+                <select id="movement-tipo" name="tipo-movimiento" required class="mt-1 block w-full border rounded-md p-2">
+                    <option value="Aportacion">Aportación (Meter dinero)</option>
+                    <option value="Rescate">Rescate (Sacar dinero)</option>
+                </select>
             </div>
+            <div class="form-group">
+                <label for="movement-monto" class="block text-sm font-medium text-gray-700">Monto</label>
+                <input type="text" inputmode="decimal" id="movement-monto" name="monto" placeholder="Ej: 100.00" required class="mt-1 block w-full border rounded-md p-2">
+            </div>
+            <button type="submit" class="btn btn-primary w-full bg-blue-600 text-white px-4 py-2 rounded-md">Guardar Movimiento</button>
+        </form>
+    </div>
+</div>
 
-            <div>
-                <label for="valorPortfolio" class="block text-sm font-medium text-gray-700">Valor Actual del Portfolio (€)</label>
-                <input type="text" inputmode="decimal" id="valorPortfolio" name="valorPortfolio" required class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 11500">
-                <p class="text-xs text-gray-500 mt-1">Cuánto vale esta cartera A DÍA DE HOY.</p>
+<div id="update-portfolio-value-modal" class="modal-container hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div class="modal-content bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div class="modal-header flex justify-between items-center p-4 border-b">
+            <h3 class="text-xl font-semibold">Actualizar Valor del Portfolio</h3>
+            <button class="modal-close text-2xl" data-modal-id="update-portfolio-value-modal">&times;</button>
+        </div>
+        <form id="update-value-form" class="p-6 space-y-4">
+            <div class="form-group">
+                <label for="snapshot-fecha" class="block text-sm font-medium text-gray-700">Fecha</label>
+                <input type="date" id="snapshot-fecha" name="fecha" required class="mt-1 block w-full border rounded-md p-2">
             </div>
-
-            <div class="flex justify-end space-x-3 pt-4">
-                <button type="button" id="snapshot-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cancelar</button>
-                <button type="submit" id="snapshot-save-button" class="bg-blue-600 text-white px-4 py-2 rounded-md">Guardar</button>
+            <div class="form-group">
+                <label for="snapshot-fondo-select" class="block text-sm font-medium text-gray-700">Fondo</label>
+                <select id="snapshot-fondo-select" name="fondo" required class="mt-1 block w-full border rounded-md p-2">
+                    <option value="">Cargando fondos...</option>
+                </select>
             </div>
+            <div class="form-group">
+                <label for="snapshot-valor" class="block text-sm font-medium text-gray-700">Valor Actual Total</label>
+                <input type="text" inputmode="decimal" id="snapshot-valor" name="valor-portfolio" placeholder="Ej: 2450.35" required class="mt-1 block w-full border rounded-md p-2">
+            </div>
+            <button type="submit" class="btn btn-primary w-full bg-blue-600 text-white px-4 py-2 rounded-md">Guardar Valor</button>
         </form>
     </div>
 </div>

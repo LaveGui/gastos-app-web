@@ -7,6 +7,7 @@ const $$ = (selector) => document.querySelectorAll(selector);
 const CATEGORY_EMOJIS = { "Padel Clases": "🤸‍♂️", "Gym": "🏋️‍♀️", "Psicologa": "🧠", "Alquiler": "🏠", "WiFi": "📶", "Luz": "💡", "Agua": "💧", "Padel partidos": "🎾", "Super": "🛒", "Extras / Salidas": "🍻", "Combustible": "⛽️", "Ropa": "👕", "Transporte": "🚌", "Viajes": "✈️" };
 
 let state = { categories: [], huchas: [], history: [], monthlyExpenses: [], selectedCategory: null, activeChart: null, currentView: 'dashboard' };
+window.investmentFunds = null; // Caché para los fondos
 
 async function debugApi() {
     console.log("Solicitando datos de depuración a la API...");
@@ -80,6 +81,8 @@ function initRouter() {
         if (navButton?.dataset.view) navigateTo(navButton.dataset.view);
     });
 
+    // --- LISTENER PARA CLICKS ---
+    // (Aquí van todas las acciones de click)
     $('#app-content').addEventListener('click', async e => {
         const categoryCard = e.target.closest('.category-item');
         if (categoryCard) return toggleCategoryDetails(categoryCard);
@@ -93,66 +96,138 @@ function initRouter() {
             const historicalDate = new Date(year, month - 1, 15);
             return openModal(null, historicalDate.toISOString());
         }
-        const openSnapshotBtn = e.target.closest('#open-snapshot-modal-btn');
-        if (openSnapshotBtn) {
-            return openInvestmentSnapshotModal();
+
+        // --- INICIO CÓDIGO NUEVO (CORREGIDO) ---
+        
+        // Listeners para ABRIR los modales
+        const openMovementBtn = e.target.closest('#open-add-movement-modal-btn');
+        if (openMovementBtn) {
+            populateInvestmentFundDropdowns(); // Rellena el dropdown
+            const today = new Date().toISOString().split('T')[0];
+            $('#movement-fecha').value = today; // Pone fecha de hoy
+            $('#add-investment-movement-modal').classList.remove('hidden');
         }
+
+        const openUpdateValueBtn = e.target.closest('#open-update-value-modal-btn');
+        if (openUpdateValueBtn) {
+            populateInvestmentFundDropdowns(); // Rellena el dropdown
+            const today = new Date().toISOString().split('T')[0];
+            $('#snapshot-fecha').value = today; // Pone fecha de hoy
+            $('#update-portfolio-value-modal').classList.remove('hidden');
+        }
+
+        // Listener para CERRAR CUALQUIER modal
+        const modalCloseBtn = e.target.closest('.modal-close');
+        if (modalCloseBtn) {
+            const modalId = modalCloseBtn.dataset.modalId;
+            if (modalId && $(`#${modalId}`)) {
+                $(`#${modalId}`).classList.add('hidden');
+            }
+        }
+        
+        // Listener para desplegar el desglose de inversión
         const groupedCard = e.target.closest('.grouped-investment-card');
         if (groupedCard) {
-    const tipo = groupedCard.dataset.tipo;
-    const breakdown = $(`[data-breakdown-for="${tipo}"]`);
-    if (breakdown) {
-        breakdown.classList.toggle('hidden');
-        
-        // CORRECCIÓN: Usamos un nombre de variable válido (camelCase)
-        // y el selector de clase específico que acabamos de añadir.
-        const toggleText = groupedCard.querySelector('.toggle-breakdown-text'); 
-        
-        if (toggleText) {
-            toggleText.textContent = breakdown.classList.contains('hidden') ? 'Ver desglose ▼' : 'Ocultar desglose ▲';
-        }
-    }
+            const tipo = groupedCard.dataset.tipo;
+            const breakdown = $(`[data-breakdown-for="${tipo}"]`);
+            if (breakdown) {
+                breakdown.classList.toggle('hidden');
+                const toggleText = groupedCard.querySelector('.toggle-breakdown-text'); 
+                if (toggleText) {
+                    toggleText.textContent = breakdown.classList.contains('hidden') ? 'Ver desglose ▼' : 'Ocultar desglose ▲';
+                }
+            }
         }
         
-        // ✅ INICIO DE LA CORRECCIÓN: Lógica de archivado con comprobación de error
+        // Listener para el botón de Archivar Mes
         const archiveBtn = e.target.closest('#archive-month-btn');
         if (archiveBtn) {
             const { year, month } = archiveBtn.dataset;
             if (confirm(`¿Estás seguro de que quieres cerrar y archivar el mes ${month}/${year}? Esta acción no se puede deshacer.`)) {
                 showLoader('Archivando mes...');
                 try {
-                    // 1. Hacemos la llamada a la API
+                    // [REVISADO] Esta llamada usa 'archiveMonth' que SÍ está en tu api.gs [cite: 11, 132]
                     const result = await apiService.call('archiveMonth', { year, month });
-
-                    // 2. COMPROBAMOS LA RESPUESTA
                     if (result.status === 'success') {
                         showToast('Mes archivado con éxito.', 'success');
-                        // Forzamos la recarga del informe para que ya no muestre los botones
-                        // Simulamos un evento 'change' en el selector
                         const selector = $('#month-selector');
                         if (selector) selector.dispatchEvent(new Event('change'));
                     } else {
-                        // Si la API devuelve {"status": "error"}, mostramos el mensaje
                         throw new Error(result.message || 'Error desconocido al archivar.');
                     }
                 } catch (error) {
-                    // Capturamos tanto errores de red como errores lógicos
                     showToast(error.message, 'error');
                 } finally {
                     hideLoader();
                 }
             }
         }
-
-        // ✅ FIN DE LA CORRECCIÓN
+        // --- FIN CÓDIGO NUEVO ---
     });
-    $('#snapshot-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'snapshot-cancel-button') {
-            closeInvestmentSnapshotModal();
+
+    // --- LISTENER PARA SUBMITS ---
+    // (Aquí van todas las acciones de guardar formularios)
+    // Usamos 'app-container' para capturar el submit aunque el modal esté fuera de 'app-content'
+    $('#app-container').addEventListener('submit', async e => {
+
+        // Handler para el NUEVO formulario de Movimiento
+        if (e.target.id === 'add-movement-form') {
+            e.preventDefault();
+            showLoader('Guardando Movimiento...');
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = {
+                fecha: formData.get('fecha'),
+                fondo: formData.get('fondo'),
+                monto: parseFloat(formData.get('monto').replace(',', '.')),
+                tipoMovimiento: formData.get('tipo-movimiento')
+            };
+
+            try {
+                // [IMPORTANTE] Esta llamada fallará si 'api.gs' no está actualizado
+                const res = await apiService.call('addInvestmentMovement', data);
+                if (res.status !== 'success') throw new Error(res.message);
+
+                showToast("Movimiento añadido con éxito.", 'success');
+                form.reset();
+                $('#add-investment-movement-modal').classList.add('hidden');
+                loadInvestmentDashboard(); // Recarga solo el dashboard de inversión
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                hideLoader();
+            }
         }
-    });
-    $('#snapshot-form').addEventListener('submit', handleInvestmentSnapshotSubmit);
 
+        // Handler para el NUEVO formulario de Actualizar Valor
+        if (e.target.id === 'update-value-form') {
+            e.preventDefault();
+            showLoader('Actualizando Valor...');
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = {
+                fecha: formData.get('fecha'),
+                fondo: formData.get('fondo'),
+                valorPortfolio: parseFloat(formData.get('valor-portfolio').replace(',', '.'))
+            };
+
+            try {
+                // [IMPORTANTE] Esta llamada fallará si 'api.gs' no está actualizado
+                const res = await apiService.call('addInvestmentSnapshot', data);
+                if (res.status !== 'success') throw new Error(res.message);
+
+                showToast("Valor del portfolio actualizado.", 'success');
+                form.reset();
+                $('#update-portfolio-value-modal').classList.add('hidden');
+                loadInvestmentDashboard(); // Recarga solo el dashboard de inversión
+            } catch (error) {
+                showToast(`Error: ${error.message}`, 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+        
+    });
 }
 
 function updateActiveNav(activeView) {
@@ -1310,11 +1385,12 @@ async function renderInvertirView() {
         
         <div id="investment-dashboard-container" class="space-y-6">
             <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold text-gray-800">2. Mis Inversiones (Snapshots)</h2>
-                <button id="open-snapshot-modal-btn" class="bg-green-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-700 transition">
-                    + Añadir Snapshot
-                </button>
-            </div>
+    <h2 class="text-xl font-semibold text-gray-800">2. Mis Inversiones</h2>
+    <div class="flex gap-2">
+        <button id="open-update-value-modal-btn" class="bg-gray-200 text-gray-800 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-300 transition">📈 Actualizar Valor</button>
+        <button id="open-add-movement-modal-btn" class="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition">💸 + Movimiento</button>
+    </div>
+</div>
             <div id="dashboard-content" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="text-center text-gray-400 animate-pulse col-span-2">Cargando datos de inversión...</div>
             </div>
@@ -1421,30 +1497,22 @@ async function loadInvestmentAssistant() {
     }
 }
 
-// main.js -> REEMPLAZA esta función
-/**
- * Carga los datos del Dashboard de Snapshots v2.0
- */
 async function loadInvestmentDashboard() {
     const container = $('#dashboard-content');
     try {
+        // Llama a la nueva función del backend (la que lee 3 hojas)
         const result = await apiService.call('getInvestmentDashboardData');
         if (result.status !== 'success') throw new Error(result.message);
-        
-        // Renderiza el nuevo dashboard v2.0
-        renderInvestmentDashboardV2(result.data);
-        
+
+        // Renderiza el dashboard con los datos recibidos
+        renderInvestmentDashboardV2_fixed(result.data); // Usamos la versión corregida
+
     } catch (error) {
         container.innerHTML = `<p class="text-center text-red-500 py-8 col-span-2">Error al cargar el dashboard de inversión: ${error.message}</p>`;
     }
 }
 
-// main.js -> AÑADE ESTA NUEVA FUNCIÓN AL FINAL
-/**
- * Renderiza el Dashboard de Inversión v2.0 (Tarjetas agrupadas y desglose).
- * @param {object} data - El objeto de la API con { grouped: {...}, individual: [...] }
- */
-function renderInvestmentDashboardV2(data) {
+function renderInvestmentDashboardV2_fixed(data) {
     const container = $('#dashboard-content');
     if (!container) return;
 
@@ -1453,26 +1521,23 @@ function renderInvestmentDashboardV2(data) {
     const formatOptions = { style: 'currency', currency: 'EUR' };
     const percentOptions = { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 };
 
-    // 1. Renderizar las tarjetas AGRUPADAS
-    for (const tipo in data.grouped) {
-        const group = data.grouped[tipo];
+    // 'data' ahora es un objeto { resumenGeneral: {...}, detallePorTipo: [...] }
+    const { resumenGeneral, detallePorTipo } = data;
+
+    // 1. Renderizar las tarjetas AGRUPADAS (detallePorTipo)
+    detallePorTipo.forEach(group => {
+        const tipo = group.tipo; // Ej: "Renta Variable"
         const gananciaColor = group.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
-        
-        // Filtramos el desglose que pertenece a este grupo
-        const individualBreakdown = data.individual.filter(f => f.tipo === tipo);
 
         // HTML para el desglose (inicialmente oculto)
-        const breakdownHTML = individualBreakdown.map(fondo => {
+        const breakdownHTML = group.fondos.map(fondo => {
             const fGananciaColor = fondo.gananciaNeta >= 0 ? 'text-green-600' : 'text-red-600';
-            const fVariacionColor = fondo.variacion >= 0 ? 'text-green-600' : 'text-red-600';
-            const fVariacionSign = fondo.variacion >= 0 ? '+' : '';
-
             return `
-                <div class="flex justify-between items-center text-sm py-2 border-t border-gray-300">
+                <div class="flex justify-between items-center text-sm py-2 border-t border-gray-200">
                     <span class="font-semibold">${fondo.fondo}</span>
                     <div class="text-right">
-                        <span class="font-bold ${fGananciaColor}">${(fondo.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
-                        <span class="text-xs ${fVariacionColor}">(${fVariacionSign}${(fondo.variacion / 100).toLocaleString('es-ES', percentOptions)})</span>
+                        <span classT="font-bold ${fGananciaColor}">${(fondo.roi).toLocaleString('es-ES', percentOptions)}</span>
+                        <p class="text-xs text-gray-500">${(fondo.valorActual).toLocaleString('es-ES', formatOptions)}</p>
                     </div>
                 </div>
             `;
@@ -1491,17 +1556,17 @@ function renderInvestmentDashboardV2(data) {
                             <span class="font-bold text-lg text-gray-900">${(group.valorActual).toLocaleString('es-ES', formatOptions)}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-gray-600">Aportaciones Totales:</span>
-                            <span class="font-medium text-gray-800">${(group.aportaciones).toLocaleString('es-ES', formatOptions)}</span>
+                            <span class="text-gray-600">Tus Aportaciones Netas:</span>
+                            <span class="font-medium text-gray-800">${(group.totalAportado).toLocaleString('es-ES', formatOptions)}</span>
                         </div>
-                        <hr class="my-2 border-gray-300">
+                        <hr class="my-2 border-gray-200">
                         <div class="flex justify-between">
                             <span class="text-gray-600">Ganancia Neta Total:</span>
                             <span class="font-bold text-lg ${gananciaColor}">${(group.gananciaNeta).toLocaleString('es-ES', formatOptions)}</span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-600">ROI Ponderado:</span>
-                            <span class="font-bold text-lg ${gananciaColor}">${(group.roiTotal / 100).toLocaleString('es-ES', percentOptions)}</span>
+                            <span class="font-bold text-lg ${gananciaColor}">${(group.roi).toLocaleString('es-ES', percentOptions)}</span>
                         </div>
                     </div>
                 </div>
@@ -1513,87 +1578,62 @@ function renderInvestmentDashboardV2(data) {
             </div>
         `;
         container.innerHTML += cardHTML;
-    }
-    
+    });
+
     // Si no hay datos, mostramos un mensaje
     if (container.innerHTML === '') {
-        container.innerHTML = `<p class="text-center text-gray-500 col-span-2">Aún no has añadido ningún snapshot. ¡Empieza con el botón "+ Añadir Snapshot"!</p>`;
+        container.innerHTML = `<p class="text-center text-gray-500 col-span-2">Aún no has añadido ningún movimiento. ¡Empieza con el botón "+ Movimiento"!</p>`;
     }
 }
 
-// main.js -> REEMPLAZA esta función
-/**
- * Abre el modal para añadir un snapshot (v2.0).
- * Ahora carga dinámicamente los fondos desde la API.
- */
-async function openInvestmentSnapshotModal() {
-    $('#snapshot-form').reset(); // Limpia el formulario
-    const select = $('#fondo-select');
-    select.innerHTML = '<option value="">Cargando fondos...</option>'; // Pone el loader
-    $('#snapshot-modal').classList.remove('hidden');
 
-    try {
-        const result = await apiService.call('getInvestmentConfig');
-        if (result.status !== 'success' || !result.data || result.data.length === 0) {
-            throw new Error('No se encontraron fondos. Revisa la hoja "Fondos_Config".');
-        }
+// ✅ AÑADE ESTA NUEVA FUNCIÓN ✅
+async function populateInvestmentFundDropdowns() {
+    const populateSelects = (funds) => { // 'funds' es un array de objetos
+        const selects = document.querySelectorAll('#movement-fondo-select, #snapshot-fondo-select');
 
-        // Rellena el select con los fondos de tu hoja
-        select.innerHTML = result.data
-            .map(fondo => `<option value="${fondo.nombre}">${fondo.nombre} (${fondo.tipo})</option>`)
-            .join('');
+        selects.forEach(select => {
+            if (!select) return;
 
-    } catch (error) {
-        showToast(error.message, 'error');
-        select.innerHTML = '<option value="">Error al cargar fondos</option>';
-    }
-}
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Selecciona un fondo...</option>'; // Reset
 
-/**
- * Cierra el modal de snapshot.
- */
-function closeInvestmentSnapshotModal() {
-    $('#snapshot-modal').classList.add('hidden');
-}
+            funds.forEach(fondo => { // 'fondo' es un objeto {nombre, tipo}
+                const option = document.createElement('option');
+                option.value = fondo.nombre;
+                option.textContent = `${fondo.nombre} (${fondo.tipo})`;
+                select.appendChild(option);
+            });
 
-// main.js -> REEMPLAZA esta función
-/**
- * Maneja el envío del formulario de snapshot (v2.0).
- * Envía 'fondo' y repinta el dashboard agrupado.
- */
-async function handleInvestmentSnapshotSubmit(e) {
-    e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
-    
-    const data = {
-        fondo: formData.get('fondo'), // <-- CAMBIO
-        aportaciones: parseFloat(formData.get('aportaciones').replace(',', '.')),
-        valorPortfolio: parseFloat(formData.get('valorPortfolio').replace(',', '.'))
+            // Restaurar el valor si aún existe
+            if (currentValue && funds.map(f => f.nombre).includes(currentValue)) {
+                select.value = currentValue;
+            }
+        });
     };
 
-    if (!data.fondo) {
-        return showToast('Por favor, selecciona un fondo.', 'error');
-    }
-    if (isNaN(data.aportaciones) || isNaN(data.valorPortfolio)) {
-        return showToast('Por favor, introduce montos válidos.', 'error');
+    // 1. Usar caché si está disponible
+    if (window.investmentFunds) {
+        populateSelects(window.investmentFunds); // Pasa el array de objetos cacheado
+        return;
     }
 
-    closeInvestmentSnapshotModal();
-    showLoader('Guardando Snapshot...');
-
+    // 2. Si no hay caché, llamar a la API
     try {
-        const result = await apiService.call('addInvestmentSnapshot', data);
-        if (result.status !== 'success') throw new Error(result.message);
-        
-        // ¡Éxito! Repintamos el dashboard v2.0 con los nuevos datos
-        renderInvestmentDashboardV2(result.data); // Usamos la nueva función
-        
-        showToast('Snapshot guardado con éxito.', 'success');
+        // Usamos la misma llamada que ya tenías en tu 'openInvestmentSnapshotModal'
+        const response = await apiService.call('getInvestmentConfig');
+        const funds = response.data; // Esto es un array de objetos
 
+        if (Array.isArray(funds) && funds.length > 0) {
+            window.investmentFunds = funds; // Guardar en caché el array de objetos
+            populateSelects(funds);
+        } else {
+            throw new Error('No se encontraron fondos. Revisa la hoja "Fondos_Config".');
+        }
     } catch (error) {
+        console.error("Error cargando configuración de inversión:", error);
         showToast(error.message, 'error');
-    } finally {
-        hideLoader();
+        // Poblar con vacío para no bloquear
+        populateSelects([]); 
     }
 }
