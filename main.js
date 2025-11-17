@@ -1395,11 +1395,87 @@ async function renderInvertirView() {
                 <div class="text-center text-gray-400 animate-pulse col-span-2">Cargando datos de inversión...</div>
             </div>
         </div>
+
+        <div class="bg-white p-4 rounded-lg shadow mt-6">
+    <h3 class="text-lg font-semibold text-gray-700 mb-4">Evolución de Rentabilidad (%)</h3>
+    <div class="h-64 relative">
+        <canvas id="investment-evolution-chart"></canvas>
+    </div>
+</div>
     `);
 
     // 2. Carga AMBAS partes en paralelo
     loadInvestmentAssistant();
     loadInvestmentDashboard();
+    loadInvestmentChart(); // <--- AÑADIR ESTO
+}
+
+// main.js
+
+async function loadInvestmentChart() {
+    const ctx = document.getElementById('investment-evolution-chart');
+    if (!ctx) return;
+
+    try {
+        // Llamada a la nueva función del backend
+        const result = await apiService.call('getInvestmentHistoryChartData');
+        
+        if (result.status !== 'success' || !result.data || result.data.length === 0) {
+            // Si no hay datos, mostramos mensaje o dejamos vacío
+            return; 
+        }
+
+        const datasets = result.data;
+
+        // Destruir gráfico anterior si existe
+        if (window.investmentChartInstance) {
+            window.investmentChartInstance.destroy();
+        }
+
+        window.investmentChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time', // Requiere adaptador de fecha o pasamos strings ordenados
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'DD/MM/YYYY'
+                        },
+                        title: { display: true, text: 'Fecha' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Rentabilidad (%)' },
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y + '%';
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Error cargando gráfico de inversión:", error);
+    }
 }
 
 // main.js -> REEMPLAZA tu función 'loadInvestmentAssistant'
