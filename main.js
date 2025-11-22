@@ -288,6 +288,27 @@ function renderDashboardView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
     const totalPercent = totalData.presupuesto ? (totalData.llevagastadoenelmes / totalData.presupuesto) * 100 : 0;
     
+
+    const today = new Date();
+    const currentDay = today.getDate();
+    const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria) === 'hipoteca');
+    
+    let mortgageAlertHTML = '';
+    
+    // Si es día 5 o más y NO hay gasto de hipoteca
+    if (currentDay >= 5 && !isMortgagePaid) {
+        mortgageAlertHTML = `
+            <div id="mortgage-alert-card" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 mb-4 rounded-r shadow-sm flex justify-between items-center animate-pulse">
+                <div>
+                    <p class="text-indigo-700 font-bold text-sm">🔔 Hipoteca Pendiente</p>
+                    <p class="text-indigo-600 text-xs">No has registrado la cuota de este mes.</p>
+                </div>
+                <button id="quick-add-mortgage" class="bg-indigo-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-indigo-700">
+                    Pagar Ahora
+                </button>
+            </div>
+        `;
+    }
     // ✅ VARIABLES DE INVERSIÓN ELIMINADAS DE AQUÍ
 
     // 2. Construimos el HTML del Dashboard
@@ -323,6 +344,22 @@ function renderDashboardView() {
 
     // 3. Renderizamos el esqueleto
     renderViewShell('Dashboard', dashboardHTML);
+
+    const quickMortgageBtn = document.getElementById('quick-add-mortgage');
+    if (quickMortgageBtn) {
+        quickMortgageBtn.addEventListener('click', () => {
+            // Abrimos modal pre-configurado
+            state.selectedCategory = 'Hipoteca'; // Asegúrate que esta categoría exista en tu lista
+            openModal();
+            // Truco: Forzamos el valor tras abrir
+            setTimeout(() => {
+                const montoInput = document.getElementById('monto');
+                // Aquí podrías poner el valor fijo si lo tienes en variable global, o dejarlo vacío
+                if(montoInput) montoInput.value = "734.25"; 
+                // Seleccionar visualmente el botón de categoría si quieres ser detallista
+            }, 100);
+        });
+    }
 
     // 4. Añadimos el listener para el botón de refrescar
     const refreshBtn = document.getElementById('refresh-dashboard');
@@ -1740,4 +1777,190 @@ async function populateInvestmentFundDropdowns() {
         // Poblar con vacío para no bloquear
         populateSelects([]); 
     }
+}
+
+// main.js
+
+// 1. Añadir 'hipoteca' al router
+// const router = { ..., hipoteca: renderHipotecaView };
+
+async function renderHipotecaView() {
+    renderViewShell('Mi Hipoteca', `
+        <div id="mortgage-loader" class="text-center py-10"><div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-500 mx-auto"></div><p class="mt-4 text-gray-500">Analizando préstamo...</p></div>
+        <div id="mortgage-content" class="hidden space-y-6"></div>
+    `);
+
+    try {
+        const result = await apiService.call('getMortgageStatus'); // Necesitas exponer esto en doPost de api.gs
+        if (result.status === 'success') {
+            const data = result.data; // Aquí recibimos lo de getMortgageStatus
+            renderMortgageDashboard(data);
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        $('#mortgage-loader').innerHTML = `<p class="text-red-500 text-center">${error.message}</p>`;
+    }
+}
+
+function renderMortgageDashboard(data) {
+    const container = $('#mortgage-content');
+    $('#mortgage-loader').classList.add('hidden');
+    container.classList.remove('hidden');
+
+    const formatEUR = (num) => num.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    
+    // Cálculos de fechas
+    const now = new Date();
+    const cuotasRestantes = data.totalCuotas - data.cuotasPagadas;
+    const fechaLibertad = new Date(now.getFullYear(), now.getMonth() + cuotasRestantes, 1);
+    
+    // Punto de inflexión (Fecha estimada)
+    const mesesParaInflexion = data.tippingPointCuota - data.cuotasPagadas;
+    let textoInflexion = "";
+    if (mesesParaInflexion <= 0) {
+        textoInflexion = "¡Ya lo pasaste! Ahora pagas más casa que intereses.";
+    } else {
+        const fechaInflexion = new Date(now.getFullYear(), now.getMonth() + mesesParaInflexion, 1);
+        textoInflexion = `Ocurrirá en <strong>${fechaInflexion.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</strong> (Cuota ${data.tippingPointCuota})`;
+    }
+
+    const porcentajePropiedad = (data.capitalAmortizado / data.capitalInicial) * 100;
+
+    container.innerHTML = `
+        <div class="bg-white p-6 rounded-lg shadow-md text-center">
+            <h3 class="text-gray-500 font-semibold mb-4">Tu Propiedad Real (Equity)</h3>
+            <div class="relative w-48 h-48 mx-auto mb-4">
+                <canvas id="mortgage-donut"></canvas>
+                <div class="absolute inset-0 flex items-center justify-center flex-col">
+                    <span class="text-3xl font-bold text-blue-600">${porcentajePropiedad.toFixed(1)}%</span>
+                    <span class="text-xs text-gray-400">Es tuyo</span>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 text-sm mt-4 border-t pt-4">
+                <div>
+                    <p class="text-gray-400">Pagado</p>
+                    <p class="font-bold text-gray-800">${formatEUR(data.capitalAmortizado)}</p>
+                </div>
+                <div>
+                    <p class="text-gray-400">Pendiente</p>
+                    <p class="font-bold text-gray-800">${formatEUR(data.capitalPendiente)}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                <p class="text-sm text-blue-600 font-bold uppercase">Libertad Financiera</p>
+                <p class="text-2xl font-bold text-gray-800">${fechaLibertad.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</p>
+                <p class="text-xs text-gray-500 mt-1">Faltan ${cuotasRestantes} cuotas</p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+                <p class="text-sm text-purple-600 font-bold uppercase">Punto de Inflexión</p>
+                <p class="text-sm text-gray-700 mt-1">${textoInflexion}</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md mt-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                🧪 Simulador de Amortización
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">Calcula cómo cambia tu hipoteca si adelantas dinero hoy.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Cantidad a adelantar (€)</label>
+                    <input type="number" id="sim-amount" class="mt-1 block w-full border rounded-md p-2 text-lg" placeholder="Ej: 10000">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="btn-sim-plazo" class="bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition text-sm font-semibold">
+                        ⏱ Reducir Plazo
+                        <span class="block text-xs font-normal opacity-80">Ahorras más intereses</span>
+                    </button>
+                    <button id="btn-sim-cuota" class="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition text-sm font-semibold">
+                        📉 Reducir Cuota
+                        <span class="block text-xs font-normal opacity-80">Vas más holgado</span>
+                    </button>
+                </div>
+
+                <div id="sim-results" class="hidden bg-gray-50 rounded-lg p-4 mt-4 border border-gray-200">
+                    </div>
+            </div>
+        </div>
+    `;
+
+    // Renderizar Gráfico Donut
+    new Chart(document.getElementById('mortgage-donut'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Pagado', 'Pendiente'],
+            datasets: [{
+                data: [data.capitalAmortizado, data.capitalPendiente],
+                backgroundColor: ['#2563eb', '#e5e7eb'],
+                borderWidth: 0,
+                cutout: '75%'
+            }]
+        },
+        options: { plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+    });
+
+    // Lógica del Simulador (Matemática pura en JS)
+    const runSimulation = (mode) => {
+        const extraPayment = parseFloat($('#sim-amount').value);
+        if (!extraPayment || extraPayment <= 0) return showToast('Introduce una cantidad válida', 'error');
+        if (extraPayment >= data.capitalPendiente) return showToast('¡Eso pagaría toda la hipoteca!', 'info');
+
+        const rateMensual = (data.interesAnual / 100) / 12;
+        const nuevoCapital = data.capitalPendiente - extraPayment;
+        const currentQuota = data.cuotaActual;
+
+        let html = '';
+        
+        if (mode === 'plazo') {
+            // Fórmula NPER: Cuántos meses quedan pagando lo mismo
+            // N = -log(1 - (r * PV) / PMT) / log(1 + r)
+            const numMeses = -Math.log(1 - (rateMensual * nuevoCapital) / currentQuota) / Math.log(1 + rateMensual);
+            const nuevosMeses = Math.ceil(numMeses);
+            const mesesAhorrados = cuotasRestantes - nuevosMeses;
+            
+            // Ahorro total estimado (aprox)
+            const totalPagadoViejo = cuotasRestantes * currentQuota;
+            const totalPagadoNuevo = (nuevosMeses * currentQuota) + extraPayment; // + lo que pones hoy
+            const interesAhorrado = totalPagadoViejo - totalPagadoNuevo;
+            // Fecha nueva
+            const nuevaFechaFin = new Date(now.getFullYear(), now.getMonth() + nuevosMeses, 1);
+
+            html = `
+                <h4 class="font-bold text-green-700 mb-2">Resultado: Reducir Plazo</h4>
+                <ul class="text-sm space-y-2">
+                    <li>📅 Terminarás en: <strong>${nuevaFechaFin.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</strong></li>
+                    <li>⏩ Te ahorras: <strong>${(mesesAhorrados/12).toFixed(1)} años</strong> (${mesesAhorrados} cuotas).</li>
+                    <li>💰 Ahorro Intereses (Estimado): <strong class="text-green-600">${formatEUR(interesAhorrado)}</strong></li>
+                    <li>ℹ️ Tu cuota sigue siendo: ${formatEUR(currentQuota)}</li>
+                </ul>
+            `;
+        } else {
+            // Reducir Cuota: Recalcular PMT manteniendo meses
+            // PMT = (PV * r) / (1 - (1 + r)^-n)
+            const nuevaCuota = (nuevoCapital * rateMensual) / (1 - Math.pow(1 + rateMensual, -cuotasRestantes));
+            const diferenciaMensual = currentQuota - nuevaCuota;
+
+            html = `
+                <h4 class="font-bold text-blue-700 mb-2">Resultado: Reducir Cuota</h4>
+                <ul class="text-sm space-y-2">
+                    <li>📉 Nueva Cuota: <strong>${formatEUR(nuevaCuota)}</strong> / mes</li>
+                    <li>😌 Pagas menos: <strong>${formatEUR(diferenciaMensual)}</strong> cada mes.</li>
+                    <li>📅 Fecha fin: Se mantiene igual (${fechaLibertad.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}).</li>
+                </ul>
+            `;
+        }
+        
+        const resDiv = $('#sim-results');
+        resDiv.innerHTML = html;
+        resDiv.classList.remove('hidden');
+    };
+
+    $('#btn-sim-plazo').addEventListener('click', () => runSimulation('plazo'));
+    $('#btn-sim-cuota').addEventListener('click', () => runSimulation('cuota'));
 }
