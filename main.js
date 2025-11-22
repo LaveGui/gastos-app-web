@@ -1410,28 +1410,40 @@ async function renderInvertirView() {
     loadInvestmentChart(); // <--- AÑADIR ESTO
 }
 
-// main.js
+// main.js -> REEMPLAZA tu función loadInvestmentChart por esta versión
 
 async function loadInvestmentChart() {
-    const ctx = document.getElementById('investment-evolution-chart');
-    if (!ctx) return;
+    const canvas = document.getElementById('investment-evolution-chart');
+    if (!canvas) return;
+
+    // Destruir gráfico anterior si existe para evitar superposiciones
+    if (window.investmentChartInstance) {
+        window.investmentChartInstance.destroy();
+        window.investmentChartInstance = null;
+    }
+
+    // Mostramos un texto de carga temporal si quieres, o simplemente esperamos
+    // showLoader('Cargando gráfico...'); 
 
     try {
-        // Llamada a la nueva función del backend
         const result = await apiService.call('getInvestmentHistoryChartData');
+        // hideLoader();
         
         if (result.status !== 'success' || !result.data || result.data.length === 0) {
-            // Si no hay datos, mostramos mensaje o dejamos vacío
+            // Si no hay datos, podríamos poner un mensaje en el canvas o dejarlo vacío
+            console.log("No hay datos suficientes para el gráfico de inversión.");
             return; 
         }
 
         const datasets = result.data;
 
-        // Destruir gráfico anterior si existe
-        if (window.investmentChartInstance) {
-            window.investmentChartInstance.destroy();
-        }
+        // Colores fijos para mejorar la estética (opcional, si la API no los manda)
+        const colors = ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#7c3aed', '#06b6d4'];
+        datasets.forEach((ds, index) => {
+            if(!ds.borderColor) ds.borderColor = colors[index % colors.length];
+        });
 
+        const ctx = canvas.getContext('2d');
         window.investmentChartInstance = new Chart(ctx, {
             type: 'line',
             data: {
@@ -1440,17 +1452,27 @@ async function loadInvestmentChart() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 scales: {
                     x: {
-                        type: 'time', // Requiere adaptador de fecha o pasamos strings ordenados
+                        type: 'time', // AHORA FUNCIONARÁ gracias al script adapter-date-fns
                         time: {
-                            unit: 'month',
-                            tooltipFormat: 'DD/MM/YYYY'
+                            unit: 'month', // Agrupa por meses si hay muchos datos
+                            tooltipFormat: 'dd/MM/yyyy', // Formato para el tooltip
+                            displayFormats: {
+                                month: 'MMM yyyy',
+                                day: 'dd MMM'
+                            }
                         },
-                        title: { display: true, text: 'Fecha' }
+                        title: { display: false, text: 'Fecha' },
+                        grid: { display: false }
                     },
                     y: {
                         title: { display: true, text: 'Rentabilidad (%)' },
+                        grid: { color: '#f3f4f6' },
                         ticks: {
                             callback: function(value) {
                                 return value + '%';
@@ -1459,6 +1481,10 @@ async function loadInvestmentChart() {
                     }
                 },
                 plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, boxWidth: 8 }
+                    },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
@@ -1466,15 +1492,17 @@ async function loadInvestmentChart() {
                             }
                         }
                     },
-                    legend: {
-                        position: 'bottom'
+                    datalabels: {
+                        display: false // Ocultamos etiquetas en los puntos para limpieza
                     }
                 }
             }
         });
 
     } catch (error) {
+        // hideLoader();
         console.error("Error cargando gráfico de inversión:", error);
+        // Opcional: mostrar error en UI
     }
 }
 
