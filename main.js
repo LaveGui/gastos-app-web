@@ -61,7 +61,7 @@ function updateState(data) {
     if (data.monthlyExpenses) state.monthlyExpenses = data.monthlyExpenses;
 }
 
-const router = { dashboard: renderDashboardView, gastos: renderGastosView, informes: renderInformesView, invertir: renderInvertirView };
+const router = { dashboard: renderDashboardView, gastos: renderGastosView, informes: renderInformesView, invertir: renderInvertirView,hipoteca: renderHipotecaView };
 
 function navigateTo(view) {
     state.currentView = view;
@@ -312,7 +312,7 @@ function renderDashboardView() {
     // ✅ VARIABLES DE INVERSIÓN ELIMINADAS DE AQUÍ
 
     // 2. Construimos el HTML del Dashboard
-    const dashboardHTML = `
+    const dashboardHTML = ` ${mortgageAlertHTML}
         <div class="flex items-center justify-between mb-2">
             <div id="last-updated" class="text-xs text-gray-400">
                 Última actualización: ${state.lastUpdated 
@@ -596,6 +596,21 @@ async function renderInformesView() {
             <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
             <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
         </div>
+        <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
+        <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
+        <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
+    </div>
+
+    <div class="mb-6">
+        <button onclick="navigateTo('hipoteca')" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition">
+            🏠 Ver Informe de Hipoteca
+        </button>
+    </div>
+
+    <div class="bg-white p-4 rounded-lg shadow">
+        <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
+    
         <div class="bg-white p-4 rounded-lg shadow">
             <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
             <div class="mb-4">
