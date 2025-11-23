@@ -4,7 +4,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwSO_oquwn67QerFAV0EjGQ
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
-const CATEGORY_EMOJIS = { "Padel Clases": "🤸‍♂️", "Gym": "🏋️‍♀️", "Psicologa": "🧠", "Alquiler": "🏠", "WiFi": "📶", "Luz": "💡", "Agua": "💧", "Padel partidos": "🎾", "Super": "🛒", "Extras / Salidas": "🍻", "Combustible": "⛽️", "Ropa": "👕", "Transporte": "🚌", "Viajes": "✈️" };
+const CATEGORY_EMOJIS = { "Padel Clases": "🤸‍♂️", "Gym": "🏋️‍♀️", "Psicologa": "🧠", "Hipoteca": "🏠", "WiFi": "📶", "Luz": "💡", "Agua": "💧", "Padel partidos": "🎾", "Super": "🛒", "Extras / Salidas": "🍻", "Combustible": "⛽️", "Ropa": "👕", "Transporte": "🚌", "Viajes": "✈️" };
 
 let state = { categories: [], huchas: [], history: [], monthlyExpenses: [], selectedCategory: null, activeChart: null, currentView: 'dashboard' };
 window.investmentFunds = null; // Caché para los fondos
@@ -586,31 +586,23 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
-// main.js -> REEMPLAZA esta función por completo
+// main.js -> REEMPLAZA renderInformesView COMPLETA
 
 async function renderInformesView() {
-    // 1. Dibuja el esqueleto de la página
+    // 1. Dibuja el esqueleto (SIN DUPLICADOS y con contenedor para Hipoteca)
     renderViewShell('Informes', `
-        <div class="bg-white p-4 rounded-lg shadow mb-6">
+        <div class="bg-white p-4 rounded-lg shadow mb-8">
             <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
             <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
             <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
         </div>
-        <div class="bg-white p-4 rounded-lg shadow mb-6">
-        <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
-        <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
-        <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
-    </div>
 
-    <div class="mb-6">
-        <button onclick="navigateTo('hipoteca')" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg shadow hover:bg-indigo-700 flex items-center justify-center transition">
-            🏠 Ver Informe de Hipoteca
-        </button>
-    </div>
+        <div id="mortgage-integration-container" class="mb-8">
+            <div class="bg-white p-4 rounded-lg shadow min-h-[200px] flex items-center justify-center">
+                 <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        </div>
 
-    <div class="bg-white p-4 rounded-lg shadow">
-        <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
-    
         <div class="bg-white p-4 rounded-lg shadow">
             <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
             <div class="mb-4">
@@ -623,7 +615,7 @@ async function renderInformesView() {
         </div>
     `);
 
-    // 2. Espera a tener los datos del historial
+    // 2. Carga datos históricos y gráfico
     try {
         if (!state.history || state.history.length === 0) {
             showLoader('Cargando historial...');
@@ -638,18 +630,163 @@ async function renderInformesView() {
         hideLoader();
     }
 
-    // 3. Ahora que estamos seguros de tener los datos, dibujamos los componentes
     populateInformesFilters();
     updateHistoryChart(['Total']);
     populateMonthSelector();
 
-    // 4. Añadimos el listener para el selector de mes (el resto se gestionará en initRouter)
     const monthSelector = $('#month-selector');
-    if (monthSelector) {
-        monthSelector.addEventListener('change', handleMonthSelection);
+    if (monthSelector) monthSelector.addEventListener('change', handleMonthSelection);
+
+    // 3. CARGAR EL INFORME DE HIPOTECA AUTOMÁTICAMENTE
+    loadMortgageComponent(); 
+}
+
+// main.js -> AÑADE/REEMPLAZA ESTA FUNCIÓN
+
+async function loadMortgageComponent() {
+    const container = $('#mortgage-integration-container');
+    if (!container) return;
+
+    try {
+        const result = await apiService.call('getMortgageStatus'); // Ahora sí funcionará
+        
+        if (result.status === 'success') {
+            const data = result.data;
+            
+            // Cálculos
+            const now = new Date();
+            const cuotasRestantes = data.totalCuotas - data.cuotasPagadas;
+            const fechaLibertad = new Date(now.getFullYear(), now.getMonth() + cuotasRestantes, 1);
+            const porcentajePropiedad = (data.capitalAmortizado / data.capitalInicial) * 100;
+            const formatEUR = (num) => num.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+            // HTML Interno del componente
+            container.innerHTML = `
+                <div class="bg-indigo-50 border border-indigo-100 p-6 rounded-lg shadow-sm">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold text-indigo-900 flex items-center">
+                            🏠 Estado de tu Hipoteca
+                        </h2>
+                        <span class="bg-indigo-200 text-indigo-800 text-xs font-bold px-2 py-1 rounded-full">
+                            Cuota ${data.cuotasPagadas} / ${data.totalCuotas}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div class="flex flex-col items-center justify-center relative">
+                             <div class="relative w-40 h-40">
+                                <canvas id="mortgage-donut-integrated"></canvas>
+                                <div class="absolute inset-0 flex items-center justify-center flex-col">
+                                    <span class="text-2xl font-bold text-indigo-700">${porcentajePropiedad.toFixed(1)}%</span>
+                                    <span class="text-[10px] text-indigo-400 uppercase tracking-wide">Es tuyo</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-end border-b border-indigo-200 pb-2">
+                                <span class="text-indigo-600 text-sm">Capital Pagado</span>
+                                <span class="font-bold text-lg text-indigo-900">${formatEUR(data.capitalAmortizado)}</span>
+                            </div>
+                            <div class="flex justify-between items-end border-b border-indigo-200 pb-2">
+                                <span class="text-indigo-600 text-sm">Pendiente</span>
+                                <span class="font-bold text-lg text-indigo-900">${formatEUR(data.capitalPendiente)}</span>
+                            </div>
+                             <div class="mt-2 pt-2">
+                                <p class="text-xs text-indigo-500 uppercase font-bold">Libertad Financiera</p>
+                                <p class="text-lg font-bold text-indigo-800">
+                                    ${fechaLibertad.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+                                </p>
+                                <p class="text-xs text-indigo-400">Faltan ${cuotasRestantes} cuotas</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-indigo-200 text-center">
+                         <button id="toggle-simulator-btn" class="text-indigo-600 text-sm font-semibold hover:text-indigo-800 flex items-center justify-center w-full">
+                            🧪 Abrir Simulador de Amortización ▼
+                         </button>
+                    </div>
+                    
+                    <div id="simulator-container" class="hidden mt-4 bg-white p-4 rounded shadow-inner">
+                         <div class="space-y-3">
+                            <label class="block text-sm text-gray-600">¿Cuánto quieres adelantar?</label>
+                            <input type="number" id="sim-amount" class="w-full border p-2 rounded" placeholder="Ej: 5000">
+                            <div class="flex gap-2">
+                                <button id="btn-sim-plazo" class="flex-1 bg-green-100 text-green-800 py-2 rounded text-sm font-bold">⏱ Reducir Plazo</button>
+                                <button id="btn-sim-cuota" class="flex-1 bg-blue-100 text-blue-800 py-2 rounded text-sm font-bold">📉 Reducir Cuota</button>
+                            </div>
+                            <div id="sim-results" class="hidden text-sm mt-2 p-2 bg-gray-50 rounded"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Inicializar Gráfico
+            new Chart(document.getElementById('mortgage-donut-integrated'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Pagado', 'Pendiente'],
+                    datasets: [{
+                        data: [data.capitalAmortizado, data.capitalPendiente],
+                        backgroundColor: ['#4f46e5', '#e0e7ff'], // Indigo 600 y Indigo 100
+                        borderWidth: 0,
+                        cutout: '75%'
+                    }]
+                },
+                options: { plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+            });
+
+            // Lógica Toggle Simulador
+            $('#toggle-simulator-btn').addEventListener('click', (e) => {
+                const sim = $('#simulator-container');
+                const isHidden = sim.classList.contains('hidden');
+                sim.classList.toggle('hidden');
+                e.target.innerText = isHidden ? '🧪 Ocultar Simulador ▲' : '🧪 Abrir Simulador de Amortización ▼';
+            });
+
+            // Re-acoplar lógica del simulador (misma que tenías, adaptada scope)
+            attachSimulatorLogic(data);
+
+        } else {
+            container.innerHTML = `<div class="p-4 text-center text-red-500">Error cargando hipoteca: ${result.message}</div>`;
+        }
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = `<div class="p-4 text-center text-red-500">Error de conexión con Hipoteca</div>`;
     }
 }
 
+// Función auxiliar para no ensuciar la principal
+function attachSimulatorLogic(data) {
+    const runSimulation = (mode) => {
+        const extraPayment = parseFloat($('#sim-amount').value);
+        if (!extraPayment || extraPayment <= 0) return showToast('Introduce cantidad', 'error');
+        
+        const rateMensual = (data.interesAnual / 100) / 12;
+        const nuevoCapital = data.capitalPendiente - extraPayment;
+        const currentQuota = data.cuotaActual;
+        const cuotasRestantes = data.totalCuotas - data.cuotasPagadas;
+        const resDiv = $('#sim-results');
+        
+        let html = '';
+        if (mode === 'plazo') {
+             const numMeses = -Math.log(1 - (rateMensual * nuevoCapital) / currentQuota) / Math.log(1 + rateMensual);
+             const mesesAhorrados = cuotasRestantes - Math.ceil(numMeses);
+             html = `<strong class="text-green-600">Ahorras ${mesesAhorrados} meses</strong> (${(mesesAhorrados/12).toFixed(1)} años) manteniendo tu cuota.`;
+        } else {
+             const nuevaCuota = (nuevoCapital * rateMensual) / (1 - Math.pow(1 + rateMensual, -cuotasRestantes));
+             html = `<strong class="text-blue-600">Nueva cuota: ${nuevaCuota.toLocaleString('es-ES', {style:'currency', currency:'EUR'})}</strong> (Ahorras ${(currentQuota - nuevaCuota).toFixed(0)}€/mes).`;
+        }
+        resDiv.innerHTML = html;
+        resDiv.classList.remove('hidden');
+    };
+
+    const btnPlazo = $('#btn-sim-plazo');
+    const btnCuota = $('#btn-sim-cuota');
+    if(btnPlazo) btnPlazo.addEventListener('click', () => runSimulation('plazo'));
+    if(btnCuota) btnCuota.addEventListener('click', () => runSimulation('cuota'));
+}
 // main.js -> REEMPLAZA esta función por la versión mejorada
 
 function populateMonthSelector() {
