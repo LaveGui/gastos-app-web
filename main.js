@@ -757,7 +757,8 @@ async function loadMortgageComponent() {
     }
 }
 
-// Función auxiliar para no ensuciar la principal
+// main.js -> REEMPLAZA tu función attachSimulatorLogic por esta versión mejorada
+
 function attachSimulatorLogic(data) {
     const runSimulation = (mode) => {
         const extraPayment = parseFloat($('#sim-amount').value);
@@ -768,26 +769,81 @@ function attachSimulatorLogic(data) {
         const currentQuota = data.cuotaActual;
         const cuotasRestantes = data.totalCuotas - data.cuotasPagadas;
         const resDiv = $('#sim-results');
+        const formatEUR = (num) => num.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
         
         let html = '';
         if (mode === 'plazo') {
+             // Fórmula para calcular nuevos meses manteniendo cuota
              const numMeses = -Math.log(1 - (rateMensual * nuevoCapital) / currentQuota) / Math.log(1 + rateMensual);
-             const mesesAhorrados = cuotasRestantes - Math.ceil(numMeses);
-             html = `<strong class="text-green-600">Ahorras ${mesesAhorrados} meses</strong> (${(mesesAhorrados/12).toFixed(1)} años) manteniendo tu cuota.`;
+             const nuevosMeses = Math.ceil(numMeses);
+             const mesesAhorrados = cuotasRestantes - nuevosMeses;
+
+             // --- CÁLCULO DEL AHORRO EN INTERESES ---
+             // Coste anterior: Lo que te quedaba por pagar (Cuotas restantes * Cuota actual)
+             const totalPagarAntes = cuotasRestantes * currentQuota;
+             
+             // Coste nuevo: Lo que pagarás ahora (Nuevas cuotas * Cuota actual) + Lo que adelantas hoy
+             const totalPagarNuevo = (nuevosMeses * currentQuota) + extraPayment;
+             
+             // La diferencia es el interés que el banco deja de cobrarte
+             const ahorroIntereses = totalPagarAntes - totalPagarNuevo;
+
+             html = `
+                <div class="flex flex-col gap-1">
+                    <div class="text-green-700 font-bold text-sm">
+                        ⏱ Ahorras ${mesesAhorrados} meses (${(mesesAhorrados/12).toFixed(1)} años)
+                    </div>
+                    <div class="text-green-600 font-bold text-lg">
+                        💰 ${formatEUR(ahorroIntereses)} ahorrados en intereses
+                    </div>
+                    <div class="text-xs text-green-800 opacity-75">
+                        Manteniendo tu cuota de ${formatEUR(currentQuota)}
+                    </div>
+                </div>
+             `;
+             // Cambiamos el fondo para que destaque más el éxito
+             resDiv.className = "mt-2 p-3 bg-green-50 border border-green-200 rounded shadow-sm text-sm";
+
         } else {
+             // Reducción de Cuota
              const nuevaCuota = (nuevoCapital * rateMensual) / (1 - Math.pow(1 + rateMensual, -cuotasRestantes));
-             html = `<strong class="text-blue-600">Nueva cuota: ${nuevaCuota.toLocaleString('es-ES', {style:'currency', currency:'EUR'})}</strong> (Ahorras ${(currentQuota - nuevaCuota).toFixed(0)}€/mes).`;
+             const ahorroMensual = currentQuota - nuevaCuota;
+             
+             // En reducción de cuota, el ahorro de intereses suele ser menor o marginal comparado con plazo,
+             // pero mostramos el ahorro de flujo de caja mensual que es lo que busca el usuario aquí.
+             html = `
+                <div class="flex flex-col gap-1">
+                    <div class="text-blue-700 font-bold text-sm">
+                        📉 Nueva cuota: ${formatEUR(nuevaCuota)}
+                    </div>
+                    <div class="text-blue-600 font-bold text-lg">
+                        ${formatEUR(ahorroMensual)} extra al mes
+                    </div>
+                    <div class="text-xs text-blue-800 opacity-75">
+                        Mismo plazo (${(cuotasRestantes/12).toFixed(1)} años)
+                    </div>
+                </div>
+             `;
+             resDiv.className = "mt-2 p-3 bg-blue-50 border border-blue-200 rounded shadow-sm text-sm";
         }
+        
         resDiv.innerHTML = html;
         resDiv.classList.remove('hidden');
     };
 
     const btnPlazo = $('#btn-sim-plazo');
     const btnCuota = $('#btn-sim-cuota');
-    if(btnPlazo) btnPlazo.addEventListener('click', () => runSimulation('plazo'));
-    if(btnCuota) btnCuota.addEventListener('click', () => runSimulation('cuota'));
+    
+    // Eliminamos listeners anteriores para evitar duplicados si se recarga el componente
+    const newBtnPlazo = btnPlazo.cloneNode(true);
+    const newBtnCuota = btnCuota.cloneNode(true);
+    btnPlazo.parentNode.replaceChild(newBtnPlazo, btnPlazo);
+    btnCuota.parentNode.replaceChild(newBtnCuota, btnCuota);
+
+    newBtnPlazo.addEventListener('click', () => runSimulation('plazo'));
+    newBtnCuota.addEventListener('click', () => runSimulation('cuota'));
 }
-// main.js -> REEMPLAZA esta función por la versión mejorada
+
 
 function populateMonthSelector() {
     const selector = $('#month-selector');
