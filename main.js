@@ -803,21 +803,21 @@ function attachSimulatorLogic(data) {
              `;
              // Cambiamos el fondo para que destaque más el éxito
              resDiv.className = "mt-2 p-3 bg-green-50 border border-green-200 rounded shadow-sm text-sm";
+            // En main.js, dentro de la función attachSimulatorLogic, busca el bloque 'else'
+// y reemplaza el html por este:
 
         } else {
              // Reducción de Cuota
              const nuevaCuota = (nuevoCapital * rateMensual) / (1 - Math.pow(1 + rateMensual, -cuotasRestantes));
              const ahorroMensual = currentQuota - nuevaCuota;
              
-             // En reducción de cuota, el ahorro de intereses suele ser menor o marginal comparado con plazo,
-             // pero mostramos el ahorro de flujo de caja mensual que es lo que busca el usuario aquí.
              html = `
                 <div class="flex flex-col gap-1">
                     <div class="text-blue-700 font-bold text-sm">
                         📉 Nueva cuota: ${formatEUR(nuevaCuota)}
                     </div>
                     <div class="text-blue-600 font-bold text-lg">
-                        ${formatEUR(ahorroMensual)} extra al mes
+                        ${formatEUR(ahorroMensual)} menos cada mes
                     </div>
                     <div class="text-xs text-blue-800 opacity-75">
                         Mismo plazo (${(cuotasRestantes/12).toFixed(1)} años)
