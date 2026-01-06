@@ -329,11 +329,15 @@ function renderDashboardView() {
     updateLastUpdatedTime(state.lastActionInfo || '');
 }
 
+// main.js - Reemplaza updateBudgetList
 function updateBudgetList(categories) {
     const listContainer = $('#budget-list');
     if (!listContainer) return;
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 };
     const velocityEmojis = { warning: '⚠️', overspending: '🛑' };
+    
+    // Definimos qué categorías son "Fijas" y no deberían moverse una vez pagadas
+    const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad'];
 
     listContainer.innerHTML = categories
         .sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated))
@@ -343,8 +347,14 @@ function updateBudgetList(categories) {
             const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
             const velocityEmoji = velocityEmojis[cat.spendingVelocity] || '';
             
+            // Lógica Visual nueva:
+            // Si es categoría fija Y ya hemos gastado el 100% (o más), la "apagamos"
+            const isFixed = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(cat.detalle));
+            const isCompleted = percentage >= 100;
+            const itemClass = (isFixed && isCompleted) ? 'opacity-50 grayscale' : ''; // Efecto gris
+
             return `
-            <div class="bg-white p-4 rounded-lg shadow-sm category-item cursor-pointer hover:shadow-md transition-shadow" data-category="${cat.detalle}">
+            <div class="bg-white p-4 rounded-lg shadow-sm category-item cursor-pointer hover:shadow-md transition-shadow ${itemClass}" data-category="${cat.detalle}">
                 <div class="flex justify-between items-center mb-2">
                     <span class="font-bold text-gray-700">${emoji} ${cat.detalle} ${velocityEmoji}</span>
                     <span class="font-semibold text-gray-800">${percentage.toFixed(1)}%</span>
@@ -864,46 +874,131 @@ function updateHistoryChart(selectedCategories) {
 }
 
 // C. Asistente Inversión
+// main.js - Reemplaza loadInvestmentAssistant COMPLETA
+
+/**
+ * Carga el Asistente de Planificación con la Lógica "Realista"
+ * Flujo: Saldo Real Banco - Sueldo = Inversión Pasada. Sueldo - Presupuesto = Buffer Futuro.
+ */
 async function loadInvestmentAssistant() {
     const container = $('#assistant-content');
     try {
         const result = await apiService.call('getInvestmentAssistantData'); 
         if (result.status !== 'success') throw new Error(result.message);
+
         const data = result.data;
         const formatOptions = { style: 'currency', currency: 'EUR' };
-        const { ahorroExtraMesActual, presupuestoTotalProximoMes, mesActual } = data;
-        const colorAhorro = ahorroExtraMesActual >= 0 ? 'text-green-600' : 'text-red-600';
-        const textoAhorro = ahorroExtraMesActual >= 0 ? 'Ahorro Extra' : 'Déficit';
+        // Solo necesitamos el presupuesto futuro, el ahorro teórico anterior lo ignoramos 
+        // porque ahora usaremos el saldo real del banco.
+        const { presupuestoTotalProximoMes, mesActual } = data;
+
+        // Limpiamos clases del loader
         container.className = '';
 
         container.innerHTML = `
          <div class="space-y-6">
-            <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación</h2>
-            <form id="investment-assistant-form" class="w-full space-y-6">
-                <div><h3 class="text-lg font-semibold text-gray-700 mb-2">Cierre de ${mesActual}</h3><div class="bg-white p-4 rounded-lg shadow"><p class="text-sm text-gray-600">${textoAhorro}</p><p class="text-3xl font-bold ${colorAhorro}">${(ahorroExtraMesActual).toLocaleString('es-ES', formatOptions)}</p></div></div>
-                <div><h3 class="text-lg font-semibold text-gray-700 mb-2">Planifica tu Nuevo Mes</h3><div class="bg-white p-4 rounded-lg shadow space-y-4"><div><label for="sueldo-input" class="block text-sm font-medium text-gray-700">Introduce tu Sueldo</label><input type="text" inputmode="decimal" id="sueldo-input" class="mt-1 block w-full border rounded-md p-2" placeholder="Ej: 1915.50"></div><button type="submit" id="calculate-plan-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Calcular Plan</button></div></div>
-                <input type="hidden" id="data-ahorro-extra" value="${ahorroExtraMesActual}"><input type="hidden" id="data-presupuesto-proximo" value="${presupuestoTotalProximoMes}">
+            <h2 class="text-xl font-semibold text-gray-800">1. Asistente de Planificación Real</h2>
+
+            <form id="investment-assistant-form" class="w-full space-y-4">
+                
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <p class="text-sm text-blue-800 mb-2 font-medium">1. ¿Cuánto dinero hay HOY en tu banco?</p>
+                    <input type="number" step="0.01" id="saldo-banco-input" class="w-full border border-blue-300 rounded-md p-3 text-lg font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: 3500.00">
+                    <p class="text-xs text-blue-600 mt-1">Mira la app de tu banco e introduce el Saldo Total.</p>
+                </div>
+
+                <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <p class="text-sm text-green-800 mb-2 font-medium">2. ¿Cuánto acabas de cobrar (Nómina)?</p>
+                    <input type="number" step="0.01" id="sueldo-input" class="w-full border border-green-300 rounded-md p-3 text-lg font-bold text-gray-700 focus:ring-2 focus:ring-green-500 outline-none" placeholder="Ej: 2000.00">
+                </div>
+
+                <div class="px-2">
+                    <p class="text-xs text-gray-500 text-center">
+                        Tu presupuesto para este mes es de <strong>${(presupuestoTotalProximoMes).toLocaleString('es-ES', formatOptions)}</strong>.
+                        <br>Calcularemos en base a esto + 100€ de seguridad.
+                    </p>
+                </div>
+
+                <button type="submit" id="calculate-plan-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition shadow-lg text-lg">
+                    Calcular Reparto 🧮
+                </button>
+                
+                <input type="hidden" id="data-presupuesto-proximo" value="${presupuestoTotalProximoMes}">
             </form>
-            <div><h3 class="text-lg font-semibold text-gray-700 mb-2">Tu Plan de Inversión</h3><div id="investment-plan-results" class="bg-white p-4 rounded-lg shadow text-center text-gray-500"><p>Introduce tu sueldo para calcular tu plan.</p></div></div>
-        </div>`; 
+            
+            <div id="investment-plan-results" class="hidden space-y-4 animate-fade-in">
+                </div>
+        </div> 
+        `; 
         
+        // Listener del Formulario con la NUEVA LÓGICA
         $('#investment-assistant-form').addEventListener('submit', (e) => { 
             e.preventDefault();
-            const presupuestoProximoMes = parseFloat($('#data-presupuesto-proximo').value);
-            const ahorroExtra = parseFloat($('#data-ahorro-extra').value);
-            const sueldo = parseFloat($('#sueldo-input').value.replace(',', '.'));
-            if (isNaN(sueldo) || sueldo <= 0) return showToast('Introduce un sueldo válido.', 'error');
-            const bufferColchon = 100;
-            const inversionMedianoPlazo = sueldo - presupuestoProximoMes;
-            const inversionCortoPlazo = ahorroExtra - bufferColchon; 
-            const totalAInvertir = inversionMedianoPlazo + inversionCortoPlazo;
+            const formatOptions = { style: 'currency', currency: 'EUR' };
+            
+            // 1. Obtener Inputs
+            const saldoBanco = parseFloat($('#saldo-banco-input').value);
+            const sueldo = parseFloat($('#sueldo-input').value);
+            const presupuesto = parseFloat($('#data-presupuesto-proximo').value);
 
-            $('#investment-plan-results').innerHTML = `
-                <div class="space-y-3 mt-3">
-                    <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg"><div><p class="font-semibold text-blue-800">1. Inversión Mediana/Largo Plazo</p><p class="text-sm text-blue-600">(Sueldo - Presupuesto)</p></div><p class="text-xl font-bold text-blue-800">${inversionMedianoPlazo.toLocaleString('es-ES', formatOptions)}</p></div>
-                    <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg"><div><p class="font-semibold text-green-800">2. Inversión Corto Plazo (Buffer)</p><p class="text-sm text-green-600">(Ahorro Extra - ${bufferColchon.toLocaleString('es-ES', formatOptions)} Colchón)</p></div><p class="text-xl font-bold text-green-800">${inversionCortoPlazo.toLocaleString('es-ES', formatOptions)}</p></div>
-                    <div class="flex justify-between items-center p-4 bg-gray-800 text-white rounded-lg mt-2"><p class="text-lg font-bold">Total a Mover Hoy:</p><p class="text-2xl font-bold">${totalAInvertir.toLocaleString('es-ES', formatOptions)}</p></div>
-                </div>`; 
+            // Validaciones básicas
+            if (isNaN(saldoBanco) || isNaN(sueldo)) return showToast('Por favor, completa ambos campos.', 'error');
+
+            // 2. LÓGICA DEL ALGORITMO
+
+            // A. Sobrante Real (Dinero Viejo) -> Para Medio Plazo
+            // Si tienes 3500 y cobraste 2000, entonces 1500 son del mes pasado.
+            const sobranteRealAnterior = saldoBanco - sueldo; 
+
+            // B. Capacidad Buffer (Dinero Nuevo) -> Para Corto Plazo
+            // De lo que cobraste, quitas gastos previstos y 100 de seguridad.
+            const bufferCalculado = sueldo - presupuesto - 100;
+
+            // C. Total a mover
+            const totalMover = (sobranteRealAnterior > 0 ? sobranteRealAnterior : 0) + (bufferCalculado > 0 ? bufferCalculado : 0);
+
+            const resultsContainer = $('#investment-plan-results');
+            resultsContainer.classList.remove('hidden');
+
+            // 3. Renderizar Resultados con explicaciones claras
+            resultsContainer.innerHTML = `
+                <h3 class="text-lg font-semibold text-gray-700 border-t pt-4">Tu Plan Sugerido</h3>
+                
+                <div class="bg-white p-4 rounded-lg shadow border-l-4 border-indigo-500">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-bold text-indigo-800">1. Inversión Medio Plazo</p>
+                            <p class="text-xs text-gray-500">Es el dinero que ya tenías antes de cobrar.</p>
+                        </div>
+                        <p class="text-xl font-bold text-indigo-700">${sobranteRealAnterior.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                    <div class="mt-2 text-xs text-indigo-400 bg-indigo-50 p-2 rounded">
+                        Saldo Total (${saldoBanco}) - Sueldo (${sueldo})
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow border-l-4 border-teal-500">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-bold text-teal-800">2. Buffer / Corto Plazo</p>
+                            <p class="text-xs text-gray-500">Generado con tu sueldo actual.</p>
+                        </div>
+                        <p class="text-xl font-bold text-teal-700">${bufferCalculado.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
+                    <div class="mt-2 text-xs text-teal-600 bg-teal-50 p-2 rounded">
+                        Sueldo (${sueldo}) - Presupuesto (${presupuesto}) - 100€ Security
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 text-white p-4 rounded-lg shadow-lg mt-2 text-center">
+                    <p class="text-sm opacity-80 uppercase tracking-widest">Total a Mover de Cuenta Corriente</p>
+                    <p class="text-3xl font-bold my-1">${totalMover.toLocaleString('es-ES', formatOptions)}</p>
+                    <p class="text-xs opacity-70">El resto se queda para pagar facturas.</p>
+                </div>
+            `;
+            
+            // Scroll suave hacia los resultados
+            resultsContainer.scrollIntoView({ behavior: 'smooth' });
         });
 
     } catch (error) {
