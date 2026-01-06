@@ -845,11 +845,12 @@ function attachSimulatorLogic(data) {
 }
 
 
+// main.js - Reemplaza la función populateMonthSelector completa
 function populateMonthSelector() {
     const selector = $('#month-selector');
     if (!selector) return;
 
-    // 1. Obtenemos los meses ya archivados desde el historial como siempre
+    // 1. Obtenemos los meses ya archivados desde el historial (Cerrados)
     const uniqueMonths = {};
     (state.history || []).forEach(item => {
         const monthNumber = getMonthNumberFromName(item.mes);
@@ -861,28 +862,35 @@ function populateMonthSelector() {
         }
     });
 
-    // ✅ AÑADIDO: Lógica para incluir el mes anterior si no está archivado
+    // 2. MEJORA: Revisamos los últimos 6 meses para rescatar "meses en el limbo"
+    // Esto permite seleccionar meses antiguos que olvidaste cerrar.
     const now = new Date();
-    // Nos situamos en el mes anterior (ej. si hoy es Septiembre, nos da Agosto)
-    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonthYear = prevMonthDate.getFullYear();
-    const prevMonthNumber = prevMonthDate.getMonth(); // 0-11
     
-    const prevMonthKey = `${prevMonthYear}-${String(prevMonthNumber + 1).padStart(2, '0')}`;
+    // Iteramos desde el mes pasado hacia atrás (hasta 6 meses)
+    for (let i = 1; i <= 6; i++) {
+        const pastDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const pastYear = pastDate.getFullYear();
+        const pastMonthIndex = pastDate.getMonth(); // 0-11
+        
+        const key = `${pastYear}-${String(pastMonthIndex + 1).padStart(2, '0')}`;
 
-    // Si el mes anterior NO está en la lista de archivados, lo añadimos
-    if (!uniqueMonths[prevMonthKey]) {
-        uniqueMonths[prevMonthKey] = new Date(prevMonthYear, prevMonthNumber);
+        // Si este mes NO está en el historial (no ha sido archivado), lo añadimos a la lista
+        if (!uniqueMonths[key]) {
+            uniqueMonths[key] = new Date(pastYear, pastMonthIndex);
+        }
     }
-    // --- Fin de la lógica añadida ---
 
-    // 2. Ordenamos las claves para asegurar el orden cronológico descendente.
+    // 3. Ordenamos las claves para asegurar el orden cronológico descendente.
     const sortedKeys = Object.keys(uniqueMonths).sort().reverse();
 
     selector.innerHTML = '<option value="">Selecciona...</option>';
     sortedKeys.forEach(key => {
         const date = uniqueMonths[key];
-        const optionText = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+        // Capitalizamos el mes para que se vea bonito (Enero, Febrero...)
+        const monthName = date.toLocaleString('es-ES', { month: 'long' });
+        const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        const optionText = `${capitalizedMonth} de ${date.getFullYear()}`;
+        
         selector.innerHTML += `<option value="${key}">${optionText}</option>`;
     });
 }
