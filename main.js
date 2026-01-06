@@ -1191,17 +1191,25 @@ function showConfirmationToast(receipt, budgetInfo) {
 
 // --- SERVICIOS Y UTILIDADES ---
 
+// main.js - Reemplaza SOLAMENTE el objeto apiService al final del archivo
+
 const apiService = {
     getInitialData: () => fetch(`${API_URL}?action=getInitialData`).then(res => res.json()),
+    
     getExpenses: (year, month) => fetch(`${API_URL}?action=getExpenses&year=${year}&month=${month}`).then(res => res.json()),
+    
     call: (action, data) => {
-        if (!navigator.onLine) { showToast('Estás sin conexión.', 'error'); return Promise.reject(new Error('Offline')); }
+        // [CORRECCIÓN] Quitamos el bloqueo manual de !navigator.onLine
+        // Dejamos que el fetch intente conectar siempre.
+        
         return fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({ action, data }),
         }).then(res => {
-            if (!res.ok) return res.json().then(e => { throw new Error(e.message || 'Error API'); });
+            if (!res.ok) {
+                return res.json().then(e => { throw new Error(e.message || 'Error API'); });
+            }
             return res.json();
         });
     }
