@@ -64,21 +64,32 @@ function navigateTo(view) {
     updateActiveNav(view);
 }
 
+// main.js - Reemplaza initRouter
 function initRouter() {
     $('#bottom-nav').addEventListener('click', (e) => {
         const navButton = e.target.closest('.nav-button');
-        if (navButton?.dataset.view) navigateTo(navButton.dataset.view);
+        if (navButton?.dataset.view) {
+            triggerHaptic('light'); // Navegar vibra suave
+            navigateTo(navButton.dataset.view);
+        }
     });
 
     $('#app-content').addEventListener('click', async e => {
         const categoryCard = e.target.closest('.category-item');
-        if (categoryCard) return toggleCategoryDetails(categoryCard);
+        if (categoryCard) {
+            triggerHaptic('light');
+            return toggleCategoryDetails(categoryCard);
+        }
 
         const reportCategoryItem = e.target.closest('.report-category-item');
-        if (reportCategoryItem) return handleReportCategoryClick(reportCategoryItem);
+        if (reportCategoryItem) {
+            triggerHaptic('light');
+            return handleReportCategoryClick(reportCategoryItem);
+        }
         
         const forgottenBtn = e.target.closest('#add-forgotten-expense-btn');
         if (forgottenBtn) {
+            triggerHaptic('medium');
             const { year, month } = forgottenBtn.dataset;
             const historicalDate = new Date(year, month - 1, 15);
             return openModal(null, historicalDate.toISOString());
@@ -86,6 +97,7 @@ function initRouter() {
 
         const openMovementBtn = e.target.closest('#open-add-movement-modal-btn');
         if (openMovementBtn) {
+            triggerHaptic('medium');
             populateInvestmentFundDropdowns();
             const today = new Date().toISOString().split('T')[0];
             $('#movement-fecha').value = today;
@@ -94,6 +106,7 @@ function initRouter() {
 
         const openUpdateValueBtn = e.target.closest('#open-update-value-modal-btn');
         if (openUpdateValueBtn) {
+            triggerHaptic('medium');
             populateInvestmentFundDropdowns();
             const today = new Date().toISOString().split('T')[0];
             $('#snapshot-fecha').value = today;
@@ -102,12 +115,14 @@ function initRouter() {
 
         const modalCloseBtn = e.target.closest('.modal-close');
         if (modalCloseBtn) {
+            triggerHaptic('light');
             const modalId = modalCloseBtn.dataset.modalId;
             if (modalId && $(`#${modalId}`)) $(`#${modalId}`).classList.add('hidden');
         }
         
         const groupedCard = e.target.closest('.grouped-investment-card');
         if (groupedCard) {
+            triggerHaptic('light');
             const tipo = groupedCard.dataset.tipo;
             const breakdown = $(`[data-breakdown-for="${tipo}"]`);
             if (breakdown) {
@@ -119,12 +134,15 @@ function initRouter() {
         
         const archiveBtn = e.target.closest('#archive-month-btn');
         if (archiveBtn) {
+            triggerHaptic('medium');
             const { year, month } = archiveBtn.dataset;
             if (confirm(`¿Estás seguro de que quieres cerrar y archivar el mes ${month}/${year}? Esta acción no se puede deshacer.`)) {
                 showLoader('Archivando mes...');
                 try {
                     const result = await apiService.call('archiveMonth', { year, month });
                     if (result.status === 'success') {
+                        // ✅ FEEDBACK HÁPTICO PESADO
+                        triggerHaptic('heavy');
                         showToast('Mes archivado con éxito.', 'success');
                         const selector = $('#month-selector');
                         if (selector) selector.dispatchEvent(new Event('change'));
@@ -132,6 +150,7 @@ function initRouter() {
                         throw new Error(result.message || 'Error desconocido al archivar.');
                     }
                 } catch (error) {
+                    triggerHaptic('warning');
                     showToast(error.message, 'error');
                 } finally {
                     hideLoader();
@@ -155,11 +174,13 @@ function initRouter() {
             try {
                 const res = await apiService.call('addInvestmentMovement', data);
                 if (res.status !== 'success') throw new Error(res.message);
+                triggerHaptic('success'); // Éxito
                 showToast("Movimiento añadido con éxito.", 'success');
                 form.reset();
                 $('#add-investment-movement-modal').classList.add('hidden');
                 loadInvestmentDashboard();
             } catch (error) {
+                triggerHaptic('warning');
                 showToast(`Error: ${error.message}`, 'error');
             } finally {
                 hideLoader();
@@ -179,11 +200,13 @@ function initRouter() {
             try {
                 const res = await apiService.call('addInvestmentSnapshot', data);
                 if (res.status !== 'success') throw new Error(res.message);
+                triggerHaptic('success'); // Éxito
                 showToast("Valor del portfolio actualizado.", 'success');
                 form.reset();
                 $('#update-portfolio-value-modal').classList.add('hidden');
                 loadInvestmentDashboard();
             } catch (error) {
+                triggerHaptic('warning');
                 showToast(`Error: ${error.message}`, 'error');
             } finally {
                 hideLoader();
@@ -200,21 +223,41 @@ function updateActiveNav(activeView) {
     });
 }
 
+// main.js - Reemplaza setupGlobalEventListeners
 function setupGlobalEventListeners() {
-    $('#fab-add-expense').addEventListener('click', () => openModal());
-    $('#expense-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'modal-cancel-button') closeModal();
-        const categoryBtn = e.target.closest('.category-btn');
-        if (categoryBtn) handleCategorySelection(categoryBtn);
-        const superBtn = e.target.closest('.super-btn');
-        if (superBtn) handleSupermarketSelection(superBtn);
+    // FAB: Feedback medio al abrir
+    $('#fab-add-expense').addEventListener('click', () => {
+        triggerHaptic('medium');
+        openModal();
     });
+
+    $('#expense-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'modal-cancel-button') {
+            triggerHaptic('light'); // Cancelar es suave
+            closeModal();
+        }
+        
+        const categoryBtn = e.target.closest('.category-btn');
+        if (categoryBtn) {
+            triggerHaptic('light'); // Seleccionar categoría es un "tict"
+            handleCategorySelection(categoryBtn);
+        }
+        
+        const superBtn = e.target.closest('.super-btn');
+        if (superBtn) {
+            triggerHaptic('light');
+            handleSupermarketSelection(superBtn);
+        }
+    });
+
     document.addEventListener('click', (e) => {
         if (e.target.id === 'refresh-dashboard') {
+            triggerHaptic('medium'); // Refrescar se siente firme
             refreshStateAndUI();
         }
     });
 
+    // Lógica Pull-to-Refresh (sin cambios, solo añadimos la vibración al activarse)
     let touchStartY = 0;
     const appContent = $('#app-content');
     appContent.addEventListener('touchstart', e => {
@@ -226,6 +269,7 @@ function setupGlobalEventListeners() {
         const touchEndY = e.touches[0].clientY;
         if (touchStartY > 0 && touchEndY - touchStartY > 100) {
             touchStartY = 0;
+            triggerHaptic('medium'); // ¡Vibra cuando detecta que vas a refrescar!
             showLoader('Actualizando...');
             refreshStateAndUI().then(() => hideLoader());
         }
@@ -1176,9 +1220,15 @@ function handleSupermarketSelection(button) {
     }
 }
 
+// main.js - Reemplaza handleFormSubmit
 async function handleFormSubmit(e) {
     e.preventDefault();
-    if (!state.selectedCategory) { showToast('Selecciona una categoría.', 'error'); return; }
+    if (!state.selectedCategory) { 
+        triggerHaptic('warning'); // Error vibra diferente
+        showToast('Selecciona una categoría.', 'error'); 
+        return; 
+    }
+    
     const form = e.target;
     const formData = new FormData(form);
     let detalle = formData.get('detalle');
@@ -1201,6 +1251,9 @@ async function handleFormSubmit(e) {
         const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
+        // ✅ FEEDBACK HÁPTICO DE ÉXITO
+        triggerHaptic('success'); 
+
         if (action === 'addExpense' && result.data.receipt) {
             updateStateAfterAddExpense(result.data.receipt);
             showConfirmationToast(result.data.receipt, result.data.budgetInfo);
@@ -1209,7 +1262,12 @@ async function handleFormSubmit(e) {
             const date = new Date(data.fecha);
             renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
         }
-    } catch (error) { showToast(error.message, 'error'); } finally { hideLoader(); }
+    } catch (error) { 
+        triggerHaptic('warning'); // Error
+        showToast(error.message, 'error'); 
+    } finally { 
+        hideLoader(); 
+    }
 }
 
 function updateStateAfterAddExpense(receipt) {
@@ -1241,8 +1299,10 @@ async function handleEditClick(e) {
     }
 }
 
+// main.js - Reemplaza handleDeleteClick
 async function handleDeleteClick(e) {
     const btn = e.target.closest('.delete-btn');
+    triggerHaptic('light'); // Feedback al pulsar el icono de basura
     const gasto = JSON.parse(btn.dataset.gasto);
 
     if (confirm(`¿Eliminar el gasto "${gasto.detalle || gasto.categoria}"?`)) {
@@ -1251,10 +1311,18 @@ async function handleDeleteClick(e) {
             const result = await apiService.call('deleteExpense', { rowId: parseInt(gasto.rowid), categoria: gasto.categoria });
             if (result.status !== 'success') throw new Error(result.message);
             
+            // ✅ FEEDBACK HÁPTICO DE BORRADO
+            triggerHaptic('warning');
+
             await refreshStateAndUI();
             updateLastUpdatedTime(`Gasto eliminado en ${gasto.categoria}`);
             showToast('Gasto eliminado', 'success');
-        } catch (error) { showToast(error.message, 'error'); } finally { hideLoader(); }
+        } catch (error) { 
+            triggerHaptic('warning');
+            showToast(error.message, 'error'); 
+        } finally { 
+            hideLoader(); 
+        }
     }
 }
 
@@ -1401,4 +1469,26 @@ function injectStyles() {
     style.id = 'app-dynamic-styles';
     style.innerHTML = `.progress-bar-bg { background-color: #e5e7eb; border-radius: 9999px; height: 0.75rem; overflow: hidden; } .progress-bar-fg { height: 100%; border-radius: 9999px; transition: width 0.5s ease-in-out; } .category-details-container { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; } .category-item.is-open .category-details-container { max-height: 500px; }`;
     document.head.appendChild(style);
+}
+
+// main.js - AÑADIR AL FINAL DEL ARCHIVO
+
+/**
+ * Genera feedback táctil (vibración) para mejorar la UX.
+ * Tipos: 'light' (botón), 'success' (guardado), 'warning' (borrar), 'heavy' (archivar).
+ */
+function triggerHaptic(type = 'light') {
+    // Si el dispositivo no soporta vibración, no hacemos nada.
+    if (!navigator.vibrate) return;
+
+    const patterns = {
+        light: 10,              // Un "tict" muy sutil (clicks normales)
+        medium: 40,             // Un toque firme (abrir modales)
+        success: [30, 50, 30],  // Dos toques rápidos (acción completada)
+        warning: [50, 100, 50], // Vibración doble más larga (borrar/error)
+        heavy: 200              // Vibración larga y pesada (archivar mes)
+    };
+
+    // Ejecutamos el patrón
+    navigator.vibrate(patterns[type] || 10);
 }
