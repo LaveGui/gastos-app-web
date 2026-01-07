@@ -1,5 +1,5 @@
 // sw.js - Service Worker Básico
-const CACHE_NAME = 'gastos-app-cache-v9';
+const CACHE_NAME = 'gastos-app-cache-v10';
 const urlsToCache = [
   '/',
   '/index.html',
