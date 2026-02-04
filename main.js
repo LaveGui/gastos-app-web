@@ -373,14 +373,15 @@ function renderDashboardView() {
     updateLastUpdatedTime(state.lastActionInfo || '');
 }
 
-// main.js - Reemplaza updateBudgetList
+// main.js - Reemplaza la función updateBudgetList completa
+
 function updateBudgetList(categories) {
     const listContainer = $('#budget-list');
     if (!listContainer) return;
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 };
     const velocityEmojis = { warning: '⚠️', overspending: '🛑' };
     
-    // Definimos qué categorías son "Fijas" y no deberían moverse una vez pagadas
+    // AÑADIDO: 'Comunidad' en la lista de fijos
     const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad'];
 
     listContainer.innerHTML = categories
@@ -391,11 +392,10 @@ function updateBudgetList(categories) {
             const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
             const velocityEmoji = velocityEmojis[cat.spendingVelocity] || '';
             
-            // Lógica Visual nueva:
-            // Si es categoría fija Y ya hemos gastado el 100% (o más), la "apagamos"
+            // Lógica Visual: Si es fija y >= 100%, se apaga visualmente
             const isFixed = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(cat.detalle));
             const isCompleted = percentage >= 100;
-            const itemClass = (isFixed && isCompleted) ? 'opacity-50 grayscale' : ''; // Efecto gris
+            const itemClass = (isFixed && isCompleted) ? 'opacity-50 grayscale' : ''; 
 
             return `
             <div class="bg-white p-4 rounded-lg shadow-sm category-item cursor-pointer hover:shadow-md transition-shadow ${itemClass}" data-category="${cat.detalle}">
