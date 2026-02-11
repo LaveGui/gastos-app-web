@@ -284,7 +284,10 @@ function renderViewShell(title, content) {
 
 // main.js - Reemplaza renderDashboardView completa
 
+// main.js - Reemplaza renderDashboardView completa
+
 function renderDashboardView() {
+    // 1. Datos iniciales
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
     const totalPercent = totalData.presupuesto ? (totalData.llevagastadoenelmes / totalData.presupuesto) * 100 : 0;
@@ -292,28 +295,26 @@ function renderDashboardView() {
     const today = new Date();
     const currentDay = today.getDate();
     
-    // --- LÓGICA DE ALERTAS INTELIGENTES ---
+    // 2. Lógica de Alertas
     let alertsHTML = '';
 
-    // 1. ALERTA HIPOTECA (Día 5 en adelante)
-    // Buscamos si hay algún gasto que contenga "hipoteca"
+    // ALERTA HIPOTECA (Día 5+)
     const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria).includes('hipoteca'));
-    
     if (currentDay >= 5 && !isMortgagePaid) {
         alertsHTML += `
             <div id="mortgage-alert-card" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 mb-3 rounded-r shadow-sm flex justify-between items-center animate-pulse">
                 <div>
                     <p class="text-indigo-700 font-bold text-sm">🔔 Hipoteca Pendiente</p>
-                    <p class="text-indigo-600 text-xs">Suele pagarse el día 5.</p>
+                    <p class="text-indigo-600 text-xs">No has registrado la cuota.</p>
                 </div>
                 <button id="quick-add-mortgage" class="bg-indigo-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-indigo-700 shadow">Pagar</button>
             </div>`;
     }
 
-    // 2. ALERTA COMUNIDAD (Día 10 en adelante)
-    // Buscamos si hay algún gasto que sea exactamente "comunidad"
+    // ALERTA COMUNIDAD (Día 10+)
     const isCommunityPaid = state.monthlyExpenses.some(g => normalizeString(g.categoria) === 'comunidad');
-
+    
+    // [TRUCO] Si quieres probarlo hoy, cambia el 10 por 1 temporalmente en la siguiente línea:
     if (currentDay >= 10 && !isCommunityPaid) {
         alertsHTML += `
             <div id="community-alert-card" class="bg-orange-50 border-l-4 border-orange-500 p-4 mb-3 rounded-r shadow-sm flex justify-between items-center animate-pulse">
@@ -325,8 +326,7 @@ function renderDashboardView() {
             </div>`;
     }
 
-    // --- RENDERIZADO DEL DASHBOARD ---
-
+    // 3. Render HTML
     const dashboardHTML = ` 
         <div id="alerts-container">${alertsHTML}</div>
         
@@ -357,43 +357,56 @@ function renderDashboardView() {
 
     renderViewShell('Dashboard', dashboardHTML);
 
-    // --- LISTENERS PARA LOS BOTONES DE ACCIÓN RÁPIDA ---
+    // --- 4. LISTENERS CORREGIDOS ---
 
-    // Botón Hipoteca
+    // Listener Hipoteca
     const quickMortgageBtn = document.getElementById('quick-add-mortgage');
     if (quickMortgageBtn) {
         quickMortgageBtn.addEventListener('click', () => {
-            triggerHaptic('medium'); // ¡Usamos la vibración que añadimos antes!
-            state.selectedCategory = 'Hipoteca';
+            triggerHaptic('medium');
             openModal();
-            // Pre-llenar monto si es fijo (puedes ajustar este valor)
+            // Corrección: Buscar y hacer clic visual en el botón
             setTimeout(() => {
+                const buttons = document.querySelectorAll('.category-btn');
+                // Buscamos "Hipoteca" ignorando mayúsculas/acentos
+                const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category).includes('hipoteca'));
+                if (btn) btn.click(); // <--- ESTO ACTIVA LA SELECCIÓN VISUAL
+                
                 const montoInput = document.getElementById('monto');
                 if(montoInput) montoInput.value = "734.25"; 
-            }, 100);
+            }, 50);
         });
     }
 
-    // Botón Comunidad (NUEVO)
+    // Listener Comunidad
     const quickCommunityBtn = document.getElementById('quick-add-community');
     if (quickCommunityBtn) {
         quickCommunityBtn.addEventListener('click', () => {
             triggerHaptic('medium');
-            state.selectedCategory = 'Comunidad'; // Debe coincidir con el Excel
             openModal();
-            
-            // Intentamos buscar el presupuesto definido para pre-llenarlo
-            const comCategory = state.categories.find(c => normalizeString(c.detalle) === 'comunidad');
-            if (comCategory && comCategory.presupuesto > 0) {
-                 setTimeout(() => {
-                    const montoInput = document.getElementById('monto');
-                    if(montoInput) montoInput.value = comCategory.presupuesto.toString(); 
-                }, 100);
-            }
+            // Corrección: Buscar y hacer clic visual en el botón
+            setTimeout(() => {
+                const buttons = document.querySelectorAll('.category-btn');
+                // Buscamos "Comunidad"
+                const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category) === 'comunidad');
+                
+                if (btn) {
+                    btn.click(); // <--- ESTO ACTIVA LA SELECCIÓN VISUAL (Borde azul)
+                    
+                    // Buscar presupuesto automático
+                    const comCategory = state.categories.find(c => normalizeString(c.detalle) === 'comunidad');
+                    if (comCategory && comCategory.presupuesto > 0) {
+                        const montoInput = document.getElementById('monto');
+                        if(montoInput) montoInput.value = comCategory.presupuesto.toString(); 
+                    }
+                } else {
+                    console.warn("No encontré el botón de Comunidad. Revisa el nombre en Excel.");
+                }
+            }, 50);
         });
     }
 
-    // Botón Refrescar
+    // Listener Refrescar
     const refreshBtn = document.getElementById('refresh-dashboard');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
@@ -403,7 +416,7 @@ function renderDashboardView() {
         });
     }
 
-    // --- RENDERIZADO DE LISTAS Y GRÁFICOS ---
+    // Renderizado de listas (sin cambios)
     try {
         if (state.categories && state.categories.length > 0) {
             updateBudgetList(state.categories);
@@ -411,7 +424,6 @@ function renderDashboardView() {
             const list = document.getElementById('budget-list');
             if (list) list.innerHTML = `<div class="text-center text-gray-400 animate-pulse">Cargando presupuestos...</div>`;
         }
-        
         if (typeof createDistributionChart === 'function' && document.getElementById('distribution-chart')) {
             const chartData = (state.categories || []).filter(c => (c.llevagastadoenelmes || 0) > 0);
             if (chartData.length > 0) {
@@ -425,7 +437,6 @@ function renderDashboardView() {
             }
         }
     } catch (err) { console.warn('Error pintando dashboard:', err); }
-    
     updateLastUpdatedTime(state.lastActionInfo || '');
 }
 
