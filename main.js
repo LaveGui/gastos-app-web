@@ -282,7 +282,8 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
-// 1. DASHBOARD
+// main.js - Reemplaza renderDashboardView completa
+
 function renderDashboardView() {
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
@@ -290,27 +291,52 @@ function renderDashboardView() {
     
     const today = new Date();
     const currentDay = today.getDate();
-    const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria) === 'hipoteca');
     
-    let mortgageAlertHTML = '';
+    // --- LÓGICA DE ALERTAS INTELIGENTES ---
+    let alertsHTML = '';
+
+    // 1. ALERTA HIPOTECA (Día 5 en adelante)
+    // Buscamos si hay algún gasto que contenga "hipoteca"
+    const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria).includes('hipoteca'));
+    
     if (currentDay >= 5 && !isMortgagePaid) {
-        mortgageAlertHTML = `
-            <div id="mortgage-alert-card" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 mb-4 rounded-r shadow-sm flex justify-between items-center animate-pulse">
+        alertsHTML += `
+            <div id="mortgage-alert-card" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 mb-3 rounded-r shadow-sm flex justify-between items-center animate-pulse">
                 <div>
                     <p class="text-indigo-700 font-bold text-sm">🔔 Hipoteca Pendiente</p>
-                    <p class="text-indigo-600 text-xs">No has registrado la cuota.</p>
+                    <p class="text-indigo-600 text-xs">Suele pagarse el día 5.</p>
                 </div>
-                <button id="quick-add-mortgage" class="bg-indigo-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-indigo-700">Pagar</button>
+                <button id="quick-add-mortgage" class="bg-indigo-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-indigo-700 shadow">Pagar</button>
             </div>`;
     }
 
-    const dashboardHTML = ` ${mortgageAlertHTML}
+    // 2. ALERTA COMUNIDAD (Día 10 en adelante)
+    // Buscamos si hay algún gasto que sea exactamente "comunidad"
+    const isCommunityPaid = state.monthlyExpenses.some(g => normalizeString(g.categoria) === 'comunidad');
+
+    if (currentDay >= 10 && !isCommunityPaid) {
+        alertsHTML += `
+            <div id="community-alert-card" class="bg-orange-50 border-l-4 border-orange-500 p-4 mb-3 rounded-r shadow-sm flex justify-between items-center animate-pulse">
+                <div>
+                    <p class="text-orange-800 font-bold text-sm">🏢 Comunidad Pendiente</p>
+                    <p class="text-orange-700 text-xs">Vence entre el 10 y el 13.</p>
+                </div>
+                <button id="quick-add-community" class="bg-orange-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-orange-700 shadow">Pagar</button>
+            </div>`;
+    }
+
+    // --- RENDERIZADO DEL DASHBOARD ---
+
+    const dashboardHTML = ` 
+        <div id="alerts-container">${alertsHTML}</div>
+        
         <div class="flex items-center justify-between mb-2">
             <div id="last-updated" class="text-xs text-gray-400">
                 Última actualización: ${state.lastUpdated ? state.lastUpdated.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : 'Nunca'} ${state.lastActionInfo ? ` - ${state.lastActionInfo}` : ''}
             </div>
-            <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600">🔄 Refrescar</button>
+            <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600 shadow-sm">🔄 Refrescar</button>
         </div>
+
         <div class="p-4 bg-white rounded-lg shadow mb-4">
             <p class="text-lg font-semibold text-gray-600">Gasto total del mes</p>
             <div class="flex items-baseline space-x-4">
@@ -319,6 +345,7 @@ function renderDashboardView() {
             </div>
             <p class="mt-2 font-semibold ${getBudgetColor(totalPercent)}">${totalPercent.toFixed(1)}% del presupuesto total</p>
         </div>
+
         <div id="distribution-area" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="budget-list" class="space-y-3"></div>
             <div id="distribution-chart-card" class="bg-white rounded-lg shadow p-4">
@@ -330,11 +357,16 @@ function renderDashboardView() {
 
     renderViewShell('Dashboard', dashboardHTML);
 
+    // --- LISTENERS PARA LOS BOTONES DE ACCIÓN RÁPIDA ---
+
+    // Botón Hipoteca
     const quickMortgageBtn = document.getElementById('quick-add-mortgage');
     if (quickMortgageBtn) {
         quickMortgageBtn.addEventListener('click', () => {
+            triggerHaptic('medium'); // ¡Usamos la vibración que añadimos antes!
             state.selectedCategory = 'Hipoteca';
             openModal();
+            // Pre-llenar monto si es fijo (puedes ajustar este valor)
             setTimeout(() => {
                 const montoInput = document.getElementById('monto');
                 if(montoInput) montoInput.value = "734.25"; 
@@ -342,14 +374,36 @@ function renderDashboardView() {
         });
     }
 
+    // Botón Comunidad (NUEVO)
+    const quickCommunityBtn = document.getElementById('quick-add-community');
+    if (quickCommunityBtn) {
+        quickCommunityBtn.addEventListener('click', () => {
+            triggerHaptic('medium');
+            state.selectedCategory = 'Comunidad'; // Debe coincidir con el Excel
+            openModal();
+            
+            // Intentamos buscar el presupuesto definido para pre-llenarlo
+            const comCategory = state.categories.find(c => normalizeString(c.detalle) === 'comunidad');
+            if (comCategory && comCategory.presupuesto > 0) {
+                 setTimeout(() => {
+                    const montoInput = document.getElementById('monto');
+                    if(montoInput) montoInput.value = comCategory.presupuesto.toString(); 
+                }, 100);
+            }
+        });
+    }
+
+    // Botón Refrescar
     const refreshBtn = document.getElementById('refresh-dashboard');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
+            triggerHaptic('medium');
             showLoader('Actualizando Dashboard...');
             refreshStateAndUI().then(() => hideLoader()).catch(() => hideLoader());
         });
     }
 
+    // --- RENDERIZADO DE LISTAS Y GRÁFICOS ---
     try {
         if (state.categories && state.categories.length > 0) {
             updateBudgetList(state.categories);
@@ -357,6 +411,7 @@ function renderDashboardView() {
             const list = document.getElementById('budget-list');
             if (list) list.innerHTML = `<div class="text-center text-gray-400 animate-pulse">Cargando presupuestos...</div>`;
         }
+        
         if (typeof createDistributionChart === 'function' && document.getElementById('distribution-chart')) {
             const chartData = (state.categories || []).filter(c => (c.llevagastadoenelmes || 0) > 0);
             if (chartData.length > 0) {
@@ -370,6 +425,7 @@ function renderDashboardView() {
             }
         }
     } catch (err) { console.warn('Error pintando dashboard:', err); }
+    
     updateLastUpdatedTime(state.lastActionInfo || '');
 }
 
