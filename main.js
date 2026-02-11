@@ -4,7 +4,23 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwSO_oquwn67QerFAV0EjGQ
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
-const CATEGORY_EMOJIS = { "Padel Clases": "🤸‍♂️", "Gym": "🏋️‍♀️", "Psicologa": "🧠", "Hipoteca": "🏠", "WiFi": "📶", "Luz": "💡", "Agua": "💧", "Padel partidos": "🎾", "Super": "🛒", "Extras / Salidas": "🍻", "Combustible": "⛽️", "Ropa": "👕", "Transporte": "🚌", "Viajes": "✈️" };
+const CATEGORY_EMOJIS = { 
+    "Padel Clases": "🤸‍♂️", 
+    "Gym": "🏋️‍♀️", 
+    "Psicologa": "🧠", 
+    "Hipoteca": "🏠", 
+    "Comunidad": "🏢",  // <-- ¡Aquí está la clave!
+    "WiFi": "📶", 
+    "Luz": "💡", 
+    "Agua": "💧", 
+    "Padel partidos": "🎾", 
+    "Super": "🛒", 
+    "Extras / Salidas": "🍻", 
+    "Combustible": "⛽️", 
+    "Ropa": "👕", 
+    "Transporte": "🚌", 
+    "Viajes": "✈️" 
+};
 
 let state = { categories: [], huchas: [], history: [], monthlyExpenses: [], selectedCategory: null, activeChart: null, currentView: 'dashboard' };
 window.investmentFunds = null; // Caché para los fondos
