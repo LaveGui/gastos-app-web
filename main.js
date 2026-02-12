@@ -1298,19 +1298,53 @@ function closeModal() {
     if (container) container.classList.add('hidden');
 }
 
-// PASO 1: PARRILLA DE ICONOS
+
+// main.js - Sustituye renderStep1 y renderStep2
+
 function renderStep1() {
     modalState.step = 1;
     $('#modal-title').textContent = 'Selecciona Categoría';
     $('#modal-back-btn').classList.add('hidden');
 
     const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad', 'Gas'];
+    const HIGH_PRIORITY = ['Super', 'Extras / Salidas', 'Transporte', 'Combustible'];
 
-    const buttonsHtml = state.categories.map(cat => {
+    // Creamos una COPIA para ordenar sin romper el orden del dashboard
+    const sortedCategories = [...state.categories].sort((a, b) => {
+        const nameA = a.detalle;
+        const nameB = b.detalle;
+
+        // 1. Detectar si están pagadas (Fijas y al 100%)
+        const isFixedA = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(nameA));
+        const percentA = a.presupuesto > 0 ? (a.llevagastadoenelmes / a.presupuesto) * 100 : 0;
+        const isPaidA = isFixedA && percentA >= 100;
+
+        const isFixedB = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(nameB));
+        const percentB = b.presupuesto > 0 ? (b.llevagastadoenelmes / b.presupuesto) * 100 : 0;
+        const isPaidB = isFixedB && percentB >= 100;
+
+        // Regla 1: Las pagadas van al FONDO
+        if (isPaidA && !isPaidB) return 1;
+        if (!isPaidA && isPaidB) return -1;
+
+        // Regla 2: Las prioritarias van ARRIBA
+        const prioA = HIGH_PRIORITY.indexOf(nameA);
+        const prioB = HIGH_PRIORITY.indexOf(nameB);
+        
+        // Si ambas son prioritarias, mantener orden de la lista HIGH_PRIORITY
+        if (prioA !== -1 && prioB !== -1) return prioA - prioB;
+        // Si solo A es prioritaria, A sube
+        if (prioA !== -1) return -1;
+        // Si solo B es prioritaria, B sube
+        if (prioB !== -1) return 1;
+
+        // Regla 3: El resto por defecto (orden original o alfabético si quisieras)
+        return 0; 
+    });
+
+    const buttonsHtml = sortedCategories.map(cat => {
         if (!cat.detalle) return '';
         const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
-        
-        // Lógica visual: Gris si es fijo y pagado
         const isFixed = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(cat.detalle));
         const percent = cat.presupuesto > 0 ? (cat.llevagastadoenelmes / cat.presupuesto) * 100 : 0;
         const isPaid = isFixed && percent >= 100;
@@ -1326,7 +1360,7 @@ function renderStep1() {
             </button>`;
     }).join('');
 
-    $('#modal-content').innerHTML = `<div class="grid grid-cols-3 sm:grid-cols-4 gap-3">${buttonsHtml}</div>`;
+    $('#modal-content').innerHTML = `<div class="grid grid-cols-3 sm:grid-cols-4 gap-3 pb-4">${buttonsHtml}</div>`;
 
     $$('.category-step-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1337,7 +1371,6 @@ function renderStep1() {
     });
 }
 
-// PASO 2: FORMULARIO DE DINERO
 function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
@@ -1345,7 +1378,6 @@ function renderStep2() {
     $('#modal-back-btn').classList.remove('hidden');
 
     let extraFields = '';
-    // Lógica especial para Supermercados
     if (modalState.category === 'Super') {
         extraFields = `
             <div class="mb-4">
@@ -1359,13 +1391,14 @@ function renderStep2() {
     }
 
     const formHtml = `
-        <form id="step2-form" class="space-y-5 animate-fade-in">
-            ${extraFields}
+        <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> ${extraFields}
             <div>
                 <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">€</span>
-                    <input type="text" inputmode="decimal" id="monto" name="monto" required class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" autocomplete="off">
+                    <input type="text" inputmode="decimal" id="monto" name="monto" required 
+                        class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
+                        placeholder="0.00" autocomplete="off">
                 </div>
             </div>
             <div id="detalle-container">
@@ -1376,19 +1409,25 @@ function renderStep2() {
                 <input type="checkbox" id="esCompartido" name="esCompartido" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label>
             </div>
-            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4">Guardar Gasto</button>
+            
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4 mb-10">
+                Guardar Gasto
+            </button>
         </form>`;
 
     $('#modal-content').innerHTML = formHtml;
-    // Auto-foco al campo de dinero
-    setTimeout(() => { const m = $('#monto'); if(m) m.focus(); }, 100);
+    
+    // Auto-foco
+    setTimeout(() => { 
+        const m = $('#monto'); 
+        if(m) m.focus(); 
+    }, 100);
 
-    // Listeners del paso 2
     $$('.super-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             triggerHaptic('light');
             modalState.subCategory = btn.dataset.super;
-            renderStep2(); // Re-render para actualizar colores de botones
+            renderStep2(); 
         });
     });
 
