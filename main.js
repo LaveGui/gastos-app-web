@@ -4,12 +4,14 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwSO_oquwn67QerFAV0EjGQ
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
+// main.js - Actualiza CATEGORY_EMOJIS
 const CATEGORY_EMOJIS = { 
     "Padel Clases": "🤸‍♂️", 
     "Gym": "🏋️‍♀️", 
     "Psicologa": "🧠", 
     "Hipoteca": "🏠", 
-    "Comunidad": "🏢",  // <-- ¡Aquí está la clave!
+    "Comunidad": "🏢", 
+    "Gas": "🔥",  // <--- NUEVO
     "WiFi": "📶", 
     "Luz": "💡", 
     "Agua": "💧", 
@@ -465,8 +467,8 @@ function updateBudgetList(categories) {
     const velocityEmojis = { warning: '⚠️', overspending: '🛑' };
     
     // AÑADIDO: 'Comunidad' en la lista de fijos
-    const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad'];
-
+    // Dentro de updateBudgetList en main.js
+    const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad', 'Gas'];
     listContainer.innerHTML = categories
         .sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated))
         .map(cat => {
@@ -1307,7 +1309,7 @@ function handleSupermarketSelection(button) {
 async function handleFormSubmit(e) {
     e.preventDefault();
     if (!state.selectedCategory) { 
-        triggerHaptic('warning'); // Error vibra diferente
+        triggerHaptic('warning'); 
         showToast('Selecciona una categoría.', 'error'); 
         return; 
     }
@@ -1334,19 +1336,48 @@ async function handleFormSubmit(e) {
         const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
-        // ✅ FEEDBACK HÁPTICO DE ÉXITO
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
             updateStateAfterAddExpense(result.data.receipt);
-            showConfirmationToast(result.data.receipt, result.data.budgetInfo);
+            
+            // --- LÓGICA DE COMPARATIVA INTELIGENTE ---
+            // 1. Calculamos el mes anterior
+            const now = new Date();
+            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonthName = prevDate.toLocaleString('es-ES', { month: 'long' }); // "diciembre", etc.
+            
+            // 2. Buscamos en el historial cuánto gastaste en esa categoría el mes pasado
+            // Normalizamos strings para evitar errores de mayúsculas/tildes
+            const historyEntry = (state.history || []).find(h => 
+                normalizeString(h.categoria) === normalizeString(data.categoria) && 
+                normalizeString(h.mes) === normalizeString(prevMonthName) &&
+                parseInt(h.ano) === prevDate.getFullYear()
+            );
+
+            let comparisonData = null;
+            if (historyEntry) {
+                const gastoMesPasado = parseFloat(historyEntry.gasto);
+                const gastoActualTotal = result.data.budgetInfo.gastado; // Lo que llevas este mes (incluyendo el nuevo)
+                const diff = gastoActualTotal - gastoMesPasado;
+                
+                comparisonData = {
+                    mesPasado: prevMonthName,
+                    gastoPasado: gastoMesPasado,
+                    diferencia: diff
+                };
+            }
+
+            // Pasamos los datos de comparación al Toast
+            showConfirmationToast(result.data.receipt, result.data.budgetInfo, comparisonData);
+
         } else {
             showToast("Gasto olvidado añadido.", 'success');
             const date = new Date(data.fecha);
             renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
         }
     } catch (error) { 
-        triggerHaptic('warning'); // Error
+        triggerHaptic('warning'); 
         showToast(error.message, 'error'); 
     } finally { 
         hideLoader(); 
@@ -1409,30 +1440,88 @@ async function handleDeleteClick(e) {
     }
 }
 
-function showConfirmationToast(receipt, budgetInfo) {
+// main.js - Reemplaza showConfirmationToast
+function showConfirmationToast(receipt, budgetInfo, comparisonData = null) {
     const existingToast = document.getElementById('confirmation-toast');
     if (existingToast) existingToast.remove();
     const toastContainer = $('#toast-container');
     if (!toastContainer || !budgetInfo) return;
 
     const percentage = budgetInfo.porcentaje || 0;
-    const formatOptions = { style: 'currency', currency: 'EUR' };
+    const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 0 }; // Sin decimales para limpieza
+
+    // Construimos el mensaje de comparación
+    let comparisonHTML = '';
+    if (comparisonData) {
+        const diff = comparisonData.diferencia;
+        let colorDiff = 'text-gray-500';
+        let iconDiff = '⚖️';
+        let textDiff = 'Igual que el mes pasado';
+
+        if (diff > 5) { // Gastaste 5€ más
+            colorDiff = 'text-red-600';
+            iconDiff = '📈';
+            textDiff = `${diff.toLocaleString('es-ES', formatOptions)} más que en ${comparisonData.mesPasado}`;
+        } else if (diff < -5) { // Gastaste 5€ menos
+            colorDiff = 'text-green-600';
+            iconDiff = '📉';
+            textDiff = `${Math.abs(diff).toLocaleString('es-ES', formatOptions)} menos que en ${comparisonData.mesPasado}`;
+        }
+
+        comparisonHTML = `
+            <div class="mt-2 pt-2 border-t border-gray-100 text-xs">
+                <p class="font-medium text-gray-600">Vs. Mes Pasado (${comparisonData.mesPasado}):</p>
+                <p class="${colorDiff} font-bold flex items-center gap-1">${iconDiff} ${textDiff}</p>
+            </div>
+        `;
+    }
 
     const toast = document.createElement('div');
     toast.id = 'confirmation-toast';
-    toast.className = 'fixed inset-x-4 bottom-24 bg-white p-4 rounded-lg shadow-2xl border';
+    toast.className = 'fixed inset-x-4 bottom-24 bg-white p-4 rounded-lg shadow-2xl border border-blue-100 animate-slide-up';
     toast.innerHTML = `
         <div class="flex justify-between items-start">
-            <div><h4 class="font-bold text-lg text-green-600">Gasto Añadido</h4><p class="text-gray-700">En <span class="font-semibold">${receipt.categoria}</span>, llevas gastado el <span class="font-bold">${percentage.toFixed(1)}%</span>.</p><p class="text-sm text-gray-500">${(budgetInfo.gastado || 0).toLocaleString('es-ES', formatOptions)} de ${budgetInfo.presupuesto.toLocaleString('es-ES', formatOptions)}</p></div>
-            <button id="toast-close-btn" class="text-gray-400 hover:text-gray-800">&times;</button>
+            <div>
+                <h4 class="font-bold text-lg text-green-600 flex items-center gap-2">✅ Gasto Añadido</h4>
+                <p class="text-gray-700 mt-1">
+                    En <span class="font-semibold">${receipt.categoria}</span> llevas el <span class="font-bold ${percentage > 100 ? 'text-red-600' : 'text-blue-600'}">${percentage.toFixed(0)}%</span>.
+                </p>
+                <p class="text-xs text-gray-400">
+                    ${(budgetInfo.gastado || 0).toLocaleString('es-ES', formatOptions)} de ${budgetInfo.presupuesto.toLocaleString('es-ES', formatOptions)}
+                </p>
+                ${comparisonHTML}
+            </div>
+            <button id="toast-close-btn" class="text-gray-400 hover:text-gray-800 p-1">&times;</button>
         </div>
-        <div class="flex justify-end space-x-2 mt-4"><button id="toast-edit-btn" class="text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300">Editar</button><button id="toast-add-another-btn" class="text-sm bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700">Añadir Otro</button></div>`;
+        <div class="flex justify-end space-x-2 mt-3">
+            <button id="toast-edit-btn" class="text-xs bg-gray-100 text-gray-600 px-3 py-2 rounded hover:bg-gray-200">Editar</button>
+            <button id="toast-add-another-btn" class="text-xs bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-semibold">Añadir Otro</button>
+        </div>`;
 
     toastContainer.appendChild(toast);
-    const close = () => toast.remove();
-    $('#toast-close-btn').addEventListener('click', close);
-    $('#toast-add-another-btn').addEventListener('click', () => { close(); openModal(); });
-    $('#toast-edit-btn').addEventListener('click', () => { close(); handleEditClick({ target: { closest: () => ({ dataset: { gasto: JSON.stringify(receipt) } }) } }); });
+
+    // Estilo para la animación de entrada
+    if (!document.getElementById('toast-anim-style')) {
+        const s = document.createElement('style');
+        s.id = 'toast-anim-style';
+        s.innerHTML = `@keyframes slide-up { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } } .animate-slide-up { animation: slide-up 0.3s ease-out; }`;
+        document.head.appendChild(s);
+    }
+
+    const close = () => { toast.remove(); };
+    $('#toast-close-btn').addEventListener('click', () => { triggerHaptic('light'); close(); });
+    $('#toast-add-another-btn').addEventListener('click', () => { triggerHaptic('medium'); close(); openModal(); });
+    $('#toast-edit-btn').addEventListener('click', () => { 
+        triggerHaptic('light'); 
+        close(); 
+        // Pequeño hack para reabrir el modal de edición usando la lógica existente
+        const dummyBtn = document.createElement('button');
+        dummyBtn.dataset.gasto = JSON.stringify(receipt);
+        handleEditClick({ target: { closest: () => dummyBtn } }); 
+    });
+    
+    // Auto-cierre a los 8 segundos para que dé tiempo a leer la comparación
+    setTimeout(close, 8000);
 }
 
 // --- SERVICIOS Y UTILIDADES ---
