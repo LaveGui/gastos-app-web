@@ -1236,145 +1236,257 @@ async function populateInvestmentFundDropdowns() {
 
 // --- MODALES Y FORMULARIOS ---
 
+// main.js - NUEVO SISTEMA DE MODAL POR PASOS
+
+// Variables globales para el modal
+let modalState = {
+    step: 1,
+    category: null,
+    subCategory: null, // Para Supermercados (Mercadona, etc.)
+    defaultDate: null
+};
+
 function openModal(category = null, defaultDate = null) {
-    let form = $('#expense-form');
-    if (!form) {
-        const modalHtml = `<div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50"><div class="bg-white rounded-lg shadow-xl w-full max-w-md"><form id="expense-form" class="p-6"></form></div></div>`;
+    // Reset del estado
+    modalState = {
+        step: 1,
+        category: category,
+        subCategory: null,
+        defaultDate: defaultDate
+    };
+
+    let container = $('#expense-modal');
+    if (!container) {
+        const modalHtml = `
+            <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center hidden z-50 transition-opacity duration-300">
+                <div class="bg-white w-full sm:max-w-md sm:rounded-lg rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]">
+                    <div class="flex justify-between items-center p-4 border-b border-gray-100">
+                        <button id="modal-back-btn" class="text-gray-400 hover:text-gray-800 p-2 hidden">⬅️ Atrás</button>
+                        <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
+                        <button id="modal-close-x" class="text-gray-400 hover:text-gray-800 p-2 text-xl font-bold">&times;</button>
+                    </div>
+                    
+                    <div id="modal-content" class="p-4 overflow-y-auto"></div>
+                </div>
+            </div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        form = $('#expense-form');
+        container = $('#expense-modal');
+        
+        // Listeners fijos del contenedor
+        $('#modal-close-x').addEventListener('click', closeModal);
+        $('#modal-back-btn').addEventListener('click', () => {
+            triggerHaptic('light');
+            if (modalState.step === 2) renderStep1();
+        });
     }
 
-    form.innerHTML = `
-        <h3 id="modal-title" class="text-xl font-semibold mb-4">Añadir Gasto</h3>
-        <div class="mb-4"><p class="block text-sm font-medium text-gray-700 mb-2">Categoría</p><div id="category-buttons" class="grid grid-cols-3 sm:grid-cols-4 gap-2"></div></div>
-        <div id="modal-dynamic-content" class="space-y-4"></div>
-        <div class="flex justify-end space-x-3 mt-6"><button type="button" id="modal-cancel-button" class="bg-gray-200 px-4 py-2 rounded-md">Cancelar</button><button type="submit" id="modal-save-button" class="bg-blue-600 text-white px-4 py-2 rounded-md">Guardar</button></div>`;
-    
-    if (defaultDate) {
-        form.dataset.defaultDate = defaultDate;
-        $('#modal-title').textContent = 'Añadir Gasto Olvidado';
-    }
+    container.classList.remove('hidden');
+    container.querySelector('.bg-white').classList.add('animate-slide-up-modal'); // Animación entrada
 
-    populateCategoryButtons();
-    $('#expense-modal').classList.remove('hidden');
-    form.addEventListener('submit', handleFormSubmit);
+    // Si ya viene con categoría (ej: Alerta Comunidad), saltamos al paso 2
+    if (category) {
+        modalState.category = category;
+        renderStep2();
+    } else {
+        renderStep1();
+    }
 }
 
 function closeModal() {
-    $('#expense-modal').classList.add('hidden');
+    const container = $('#expense-modal');
+    if (container) container.classList.add('hidden');
 }
 
-function populateCategoryButtons() {
-    const container = $('#category-buttons');
-    if (!container) return;
-    container.innerHTML = state.categories.map(item => {
-        if (!item.detalle) return '';
-        const emoji = CATEGORY_EMOJIS[item.detalle] || '💰';
-        return `<button type="button" class="category-btn text-center p-2 border rounded-lg hover:border-blue-500" data-category="${item.detalle}"><span class="text-2xl">${emoji}</span><span class="block text-xs mt-1">${item.detalle}</span></button>`;
+// PASO 1: SELECCIÓN DE CATEGORÍA
+function renderStep1() {
+    modalState.step = 1;
+    $('#modal-title').textContent = 'Selecciona Categoría';
+    $('#modal-back-btn').classList.add('hidden');
+
+    // Definimos fijos para ponerlos en gris si ya están pagados
+    const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad', 'Gas'];
+
+    const buttonsHtml = state.categories.map(cat => {
+        if (!cat.detalle) return '';
+        const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
+        
+        // Lógica visual: Si es fijo y ya gastaste >= presupuesto, se ve gris
+        const isFixed = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(cat.detalle));
+        const percent = cat.presupuesto > 0 ? (cat.llevagastadoenelmes / cat.presupuesto) * 100 : 0;
+        const isPaid = isFixed && percent >= 100;
+        
+        const opacityClass = isPaid ? 'opacity-40 grayscale bg-gray-50' : 'hover:border-blue-500 hover:bg-blue-50';
+        const paidBadge = isPaid ? '<span class="absolute top-1 right-1 text-[10px] bg-green-100 text-green-700 px-1 rounded">Pagado</span>' : '';
+
+        return `
+            <button type="button" class="category-step-btn relative flex flex-col items-center justify-center p-3 border rounded-xl transition-all ${opacityClass}" data-category="${cat.detalle}">
+                <span class="text-3xl mb-1">${emoji}</span>
+                <span class="text-xs font-medium text-center text-gray-700 leading-tight">${cat.detalle}</span>
+                ${paidBadge}
+            </button>`;
     }).join('');
+
+    $('#modal-content').innerHTML = `
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            ${buttonsHtml}
+        </div>
+    `;
+
+    // Listeners de los botones
+    $$('.category-step-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            triggerHaptic('light');
+            modalState.category = btn.dataset.category;
+            renderStep2();
+        });
+    });
 }
 
-function handleCategorySelection(button) {
-    state.selectedCategory = button.dataset.category;
-    $$('.category-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-blue-500'));
-    button.classList.add('ring-2', 'ring-blue-500');
+// PASO 2: FORMULARIO DE DETALLES
+function renderStep2() {
+    modalState.step = 2;
+    const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
+    $('#modal-title').textContent = `${emoji} ${modalState.category}`;
+    $('#modal-back-btn').classList.remove('hidden');
 
-    const dynamicContent = $('#modal-dynamic-content');
-    let htmlContent = '';
-
-    if (state.selectedCategory === 'Super') {
-        htmlContent += `<div><label class="block text-sm font-medium text-gray-700 mb-2">Comercio</label><div class="grid grid-cols-3 gap-2"><button type="button" class="super-btn p-2 border rounded-lg" data-super="Mercadona">Mercadona</button><button type="button" class="super-btn p-2 border rounded-lg" data-super="Consum">Consum</button><button type="button" class="super-btn p-2 border rounded-lg" data-super="Otro">Otro</button></div></div><div id="super-extra-fields"></div>`;
-    } else {
-        htmlContent += `<div><label for="monto" class="block text-sm font-medium text-gray-700">Monto (€)</label><input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]+" id="monto" name="monto" required class="mt-1 block w-full border rounded-md p-2"></div><div><label for="detalle" class="block text-sm font-medium text-gray-700">Detalle (Opcional)</label><input type="text" name="detalle" id="detalle" class="mt-1 block w-full border rounded-md p-2"></div><div class="flex items-center mt-2"><input type="checkbox" id="esCompartido" name="esCompartido" class="h-4 w-4 rounded"><label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label></div>`;
+    let extraFields = '';
+    
+    // Caso especial: Supermercado
+    if (modalState.category === 'Super') {
+        extraFields = `
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">¿Dónde?</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Mercadona' ? 'bg-green-100 border-green-500 ring-2 ring-green-500' : 'bg-white'}" data-super="Mercadona">Mercadona</button>
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Consum' ? 'bg-orange-100 border-orange-500 ring-2 ring-orange-500' : 'bg-white'}" data-super="Consum">Consum</button>
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Otro' ? 'bg-gray-100 border-gray-500 ring-2 ring-gray-500' : 'bg-white'}" data-super="Otro">Otro</button>
+                </div>
+            </div>`;
     }
-    dynamicContent.innerHTML = htmlContent;
+
+    const formHtml = `
+        <form id="step2-form" class="space-y-5 animate-fade-in">
+            ${extraFields}
+            
+            <div>
+                <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">€</span>
+                    <input type="text" inputmode="decimal" id="monto" name="monto" required 
+                        class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
+                        placeholder="0.00" autocomplete="off">
+                </div>
+            </div>
+
+            <div id="detalle-container">
+                <label for="detalle" class="block text-sm font-medium text-gray-700 mb-1">Detalle (Opcional)</label>
+                <input type="text" name="detalle" id="detalle" 
+                    class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
+                    placeholder="Ej: Cena, Regalo...">
+            </div>
+
+            <div class="flex items-center pt-2">
+                <input type="checkbox" id="esCompartido" name="esCompartido" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4">
+                Guardar Gasto
+            </button>
+        </form>
+    `;
+
+    $('#modal-content').innerHTML = formHtml;
+    
+    // Auto-focus al monto
+    setTimeout(() => $('#monto').focus(), 100);
+
+    // Listeners Supermercado
+    $$('.super-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            triggerHaptic('light');
+            modalState.subCategory = btn.dataset.super;
+            // Re-renderizamos solo para actualizar estilos (o cambiamos clases manualmente)
+            renderStep2(); 
+        });
+    });
+
+    // Handle Submit
+    $('#step2-form').addEventListener('submit', handleFormSubmit);
 }
 
-function handleSupermarketSelection(button) {
-    $$('.super-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-blue-500'));
-    button.classList.add('ring-2', 'ring-blue-500');
-    const superType = button.dataset.super;
-    const extraFields = $('#super-extra-fields');
-    let commonFields = `<div><label for="monto" class="block text-sm font-medium text-gray-700">Monto (€)</label><input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]+" id="monto" name="monto" required class="mt-1 block w-full border rounded-md p-2"></div><div class="flex items-center mt-2"><input type="checkbox" id="esCompartido" name="esCompartido" class="h-4 w-4 rounded"><label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label></div>`;
-
-    if (superType === 'Otro') {
-        extraFields.innerHTML = `<div><label for="detalle" class="block text-sm font-medium text-gray-700">Nombre del Supermercado</label><input type="text" name="detalle" id="detalle" required class="mt-1 block w-full border rounded-md p-2"></div>${commonFields}`;
-    } else {
-        $('#expense-form').dataset.supermercado = superType;
-        extraFields.innerHTML = commonFields;
-    }
-}
 
 // main.js - Reemplaza handleFormSubmit
+
 async function handleFormSubmit(e) {
     e.preventDefault();
-    if (!state.selectedCategory) { 
-        triggerHaptic('warning'); 
-        showToast('Selecciona una categoría.', 'error'); 
-        return; 
-    }
     
     const form = e.target;
     const formData = new FormData(form);
-    let detalle = formData.get('detalle');
-    if (state.selectedCategory === 'Super' && !detalle) detalle = form.dataset.supermercado || 'Supermercado';
     
+    let detalle = formData.get('detalle');
+    // Lógica Supermercado
+    if (modalState.category === 'Super') {
+        if (modalState.subCategory === 'Otro') {
+             // Si es 'Otro', usamos lo que haya escrito en detalle, o 'Supermercado' si está vacío
+             if(!detalle) detalle = 'Supermercado';
+        } else {
+             // Si eligió Mercadona/Consum, forzamos ese nombre
+             detalle = modalState.subCategory || 'Supermercado';
+        }
+    }
+
     const data = { 
-        categoria: state.selectedCategory, 
+        categoria: modalState.category, 
         monto: parseFloat(formData.get('monto').replace(',', '.')), 
-        detalle, 
+        detalle: detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
 
-    const defaultDate = form.dataset.defaultDate;
-    if (defaultDate) data.fecha = defaultDate;
+    if (modalState.defaultDate) data.fecha = modalState.defaultDate;
 
     closeModal();
     showLoader('Procesando gasto...');
 
     try {
-        const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
+        const action = modalState.defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
-            updateStateAfterAddExpense(result.data.receipt);
+            // Actualizamos la UI localmente primero para sensación inmediata
+            await refreshStateAndUI(); // Recargamos para tener datos frescos
             
-            // --- LÓGICA DE COMPARATIVA INTELIGENTE ---
-            // 1. Calculamos el mes anterior
-            const now = new Date();
-            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            const prevMonthName = prevDate.toLocaleString('es-ES', { month: 'long' }); // "diciembre", etc.
-            
-            // 2. Buscamos en el historial cuánto gastaste en esa categoría el mes pasado
-            // Normalizamos strings para evitar errores de mayúsculas/tildes
-            const historyEntry = (state.history || []).find(h => 
-                normalizeString(h.categoria) === normalizeString(data.categoria) && 
-                normalizeString(h.mes) === normalizeString(prevMonthName) &&
-                parseInt(h.ano) === prevDate.getFullYear()
-            );
-
+            // --- COMPARATIVA DESDE API (MUCHO MEJOR) ---
+            const comparativa = result.data.comparativa; // Ahora viene del backend
             let comparisonData = null;
-            if (historyEntry) {
-                const gastoMesPasado = parseFloat(historyEntry.gasto);
-                const gastoActualTotal = result.data.budgetInfo.gastado; // Lo que llevas este mes (incluyendo el nuevo)
-                const diff = gastoActualTotal - gastoMesPasado;
+
+            if (comparativa) {
+                const gastoMesPasado = comparativa.gastoPasado;
+                // Calculamos diferencia contra lo que llevamos acumulado (BudgetInfo actualizado)
+                // OJO: result.data.budgetInfo suele venir vacío si no actualizamos 'getBudgetInfo' en backend.
+                // Truco: Usamos 'state' que acabamos de refrescar.
+                const currentCat = state.categories.find(c => c.detalle === data.categoria);
+                const gastoActual = currentCat ? currentCat.llevagastadoenelmes : data.monto;
+
+                const diff = gastoActual - gastoMesPasado;
                 
                 comparisonData = {
-                    mesPasado: prevMonthName,
+                    mesPasado: comparativa.mesPasado,
                     gastoPasado: gastoMesPasado,
                     diferencia: diff
                 };
             }
 
-            // Pasamos los datos de comparación al Toast
-            showConfirmationToast(result.data.receipt, result.data.budgetInfo, comparisonData);
+            showConfirmationToast(result.data.receipt, { 
+                presupuesto: state.categories.find(c => c.detalle === data.categoria)?.presupuesto || 0,
+                gastado: state.categories.find(c => c.detalle === data.categoria)?.llevagastadoenelmes || 0,
+                porcentaje: 0 // Se calcula dentro
+            }, comparisonData);
 
         } else {
             showToast("Gasto olvidado añadido.", 'success');
-            const date = new Date(data.fecha);
-            renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
         }
     } catch (error) { 
         triggerHaptic('warning'); 
