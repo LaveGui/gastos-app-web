@@ -27,6 +27,14 @@ const CATEGORY_EMOJIS = {
 let state = { categories: [], huchas: [], history: [], monthlyExpenses: [], selectedCategory: null, activeChart: null, currentView: 'dashboard' };
 window.investmentFunds = null; // Caché para los fondos
 
+let modalState = {
+    step: 1,
+    category: null,
+    subCategory: null, // Para Supermercados (Mercadona, etc.)
+    defaultDate: null
+};
+
+
 // --- INICIALIZACIÓN ---
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1236,16 +1244,6 @@ async function populateInvestmentFundDropdowns() {
 
 // --- MODALES Y FORMULARIOS ---
 
-// main.js - NUEVO SISTEMA DE MODAL POR PASOS
-
-// Variables globales para el modal
-let modalState = {
-    step: 1,
-    category: null,
-    subCategory: null, // Para Supermercados (Mercadona, etc.)
-    defaultDate: null
-};
-
 function openModal(category = null, defaultDate = null) {
     // Reset del estado
     modalState = {
@@ -1256,7 +1254,11 @@ function openModal(category = null, defaultDate = null) {
     };
 
     let container = $('#expense-modal');
-    if (!container) {
+    
+    // Si el modal no existe o tiene la estructura vieja, lo creamos de cero
+    if (!container || !container.querySelector('#modal-content')) {
+        if (container) container.remove(); // Borramos basura anterior
+        
         const modalHtml = `
             <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center hidden z-50 transition-opacity duration-300">
                 <div class="bg-white w-full sm:max-w-md sm:rounded-lg rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]">
@@ -1265,14 +1267,13 @@ function openModal(category = null, defaultDate = null) {
                         <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
                         <button id="modal-close-x" class="text-gray-400 hover:text-gray-800 p-2 text-xl font-bold">&times;</button>
                     </div>
-                    
                     <div id="modal-content" class="p-4 overflow-y-auto"></div>
                 </div>
             </div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         container = $('#expense-modal');
         
-        // Listeners fijos del contenedor
+        // Listeners fijos del marco
         $('#modal-close-x').addEventListener('click', closeModal);
         $('#modal-back-btn').addEventListener('click', () => {
             triggerHaptic('light');
@@ -1281,9 +1282,9 @@ function openModal(category = null, defaultDate = null) {
     }
 
     container.classList.remove('hidden');
-    container.querySelector('.bg-white').classList.add('animate-slide-up-modal'); // Animación entrada
+    container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
 
-    // Si ya viene con categoría (ej: Alerta Comunidad), saltamos al paso 2
+    // Si ya viene con categoría (ej: desde Alertas), vamos directo al paso 2
     if (category) {
         modalState.category = category;
         renderStep2();
@@ -1297,20 +1298,19 @@ function closeModal() {
     if (container) container.classList.add('hidden');
 }
 
-// PASO 1: SELECCIÓN DE CATEGORÍA
+// PASO 1: PARRILLA DE ICONOS
 function renderStep1() {
     modalState.step = 1;
     $('#modal-title').textContent = 'Selecciona Categoría';
     $('#modal-back-btn').classList.add('hidden');
 
-    // Definimos fijos para ponerlos en gris si ya están pagados
     const FIXED_CATEGORIES = ['Alquiler', 'Hipoteca', 'Gym', 'WiFi', 'Luz', 'Agua', 'Psicologa', 'Comunidad', 'Gas'];
 
     const buttonsHtml = state.categories.map(cat => {
         if (!cat.detalle) return '';
         const emoji = CATEGORY_EMOJIS[cat.detalle] || '💰';
         
-        // Lógica visual: Si es fijo y ya gastaste >= presupuesto, se ve gris
+        // Lógica visual: Gris si es fijo y pagado
         const isFixed = FIXED_CATEGORIES.some(f => normalizeString(f) === normalizeString(cat.detalle));
         const percent = cat.presupuesto > 0 ? (cat.llevagastadoenelmes / cat.presupuesto) * 100 : 0;
         const isPaid = isFixed && percent >= 100;
@@ -1326,13 +1326,8 @@ function renderStep1() {
             </button>`;
     }).join('');
 
-    $('#modal-content').innerHTML = `
-        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">
-            ${buttonsHtml}
-        </div>
-    `;
+    $('#modal-content').innerHTML = `<div class="grid grid-cols-3 sm:grid-cols-4 gap-3">${buttonsHtml}</div>`;
 
-    // Listeners de los botones
     $$('.category-step-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             triggerHaptic('light');
@@ -1342,7 +1337,7 @@ function renderStep1() {
     });
 }
 
-// PASO 2: FORMULARIO DE DETALLES
+// PASO 2: FORMULARIO DE DINERO
 function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
@@ -1350,8 +1345,7 @@ function renderStep2() {
     $('#modal-back-btn').classList.remove('hidden');
 
     let extraFields = '';
-    
-    // Caso especial: Supermercado
+    // Lógica especial para Supermercados
     if (modalState.category === 'Super') {
         extraFields = `
             <div class="mb-4">
@@ -1367,71 +1361,53 @@ function renderStep2() {
     const formHtml = `
         <form id="step2-form" class="space-y-5 animate-fade-in">
             ${extraFields}
-            
             <div>
                 <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">€</span>
-                    <input type="text" inputmode="decimal" id="monto" name="monto" required 
-                        class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                        placeholder="0.00" autocomplete="off">
+                    <input type="text" inputmode="decimal" id="monto" name="monto" required class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" autocomplete="off">
                 </div>
             </div>
-
             <div id="detalle-container">
                 <label for="detalle" class="block text-sm font-medium text-gray-700 mb-1">Detalle (Opcional)</label>
-                <input type="text" name="detalle" id="detalle" 
-                    class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                    placeholder="Ej: Cena, Regalo...">
+                <input type="text" name="detalle" id="detalle" class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Ej: Cena, Regalo...">
             </div>
-
             <div class="flex items-center pt-2">
                 <input type="checkbox" id="esCompartido" name="esCompartido" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label>
             </div>
-
-            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4">
-                Guardar Gasto
-            </button>
-        </form>
-    `;
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4">Guardar Gasto</button>
+        </form>`;
 
     $('#modal-content').innerHTML = formHtml;
-    
-    // Auto-focus al monto
-    setTimeout(() => $('#monto').focus(), 100);
+    // Auto-foco al campo de dinero
+    setTimeout(() => { const m = $('#monto'); if(m) m.focus(); }, 100);
 
-    // Listeners Supermercado
+    // Listeners del paso 2
     $$('.super-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             triggerHaptic('light');
             modalState.subCategory = btn.dataset.super;
-            // Re-renderizamos solo para actualizar estilos (o cambiamos clases manualmente)
-            renderStep2(); 
+            renderStep2(); // Re-render para actualizar colores de botones
         });
     });
 
-    // Handle Submit
     $('#step2-form').addEventListener('submit', handleFormSubmit);
 }
-
 
 // main.js - Reemplaza handleFormSubmit
 
 async function handleFormSubmit(e) {
     e.preventDefault();
-    
     const form = e.target;
     const formData = new FormData(form);
     
+    // Gestión del detalle para Supermercados
     let detalle = formData.get('detalle');
-    // Lógica Supermercado
     if (modalState.category === 'Super') {
         if (modalState.subCategory === 'Otro') {
-             // Si es 'Otro', usamos lo que haya escrito en detalle, o 'Supermercado' si está vacío
              if(!detalle) detalle = 'Supermercado';
         } else {
-             // Si eligió Mercadona/Consum, forzamos ese nombre
              detalle = modalState.subCategory || 'Supermercado';
         }
     }
@@ -1455,21 +1431,17 @@ async function handleFormSubmit(e) {
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
-            // Actualizamos la UI localmente primero para sensación inmediata
-            await refreshStateAndUI(); // Recargamos para tener datos frescos
+            await refreshStateAndUI(); 
             
-            // --- COMPARATIVA DESDE API (MUCHO MEJOR) ---
-            const comparativa = result.data.comparativa; // Ahora viene del backend
+            // --- COMPARATIVA DESDE API (Lógica de "vs Mes Pasado") ---
+            const comparativa = result.data.comparativa; 
             let comparisonData = null;
 
             if (comparativa) {
                 const gastoMesPasado = comparativa.gastoPasado;
-                // Calculamos diferencia contra lo que llevamos acumulado (BudgetInfo actualizado)
-                // OJO: result.data.budgetInfo suele venir vacío si no actualizamos 'getBudgetInfo' en backend.
-                // Truco: Usamos 'state' que acabamos de refrescar.
+                // Calculamos cuánto llevamos gastado ahora (del estado actualizado)
                 const currentCat = state.categories.find(c => c.detalle === data.categoria);
                 const gastoActual = currentCat ? currentCat.llevagastadoenelmes : data.monto;
-
                 const diff = gastoActual - gastoMesPasado;
                 
                 comparisonData = {
@@ -1482,7 +1454,7 @@ async function handleFormSubmit(e) {
             showConfirmationToast(result.data.receipt, { 
                 presupuesto: state.categories.find(c => c.detalle === data.categoria)?.presupuesto || 0,
                 gastado: state.categories.find(c => c.detalle === data.categoria)?.llevagastadoenelmes || 0,
-                porcentaje: 0 // Se calcula dentro
+                porcentaje: 0 
             }, comparisonData);
 
         } else {
