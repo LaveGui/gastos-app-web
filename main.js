@@ -1436,12 +1436,13 @@ function renderStep2() {
 
 // main.js - Reemplaza handleFormSubmit
 
+// main.js - CORRECCIÓN handleFormSubmit
+
 async function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
     const formData = new FormData(form);
     
-    // Gestión del detalle para Supermercados
     let detalle = formData.get('detalle');
     if (modalState.category === 'Super') {
         if (modalState.subCategory === 'Otro') {
@@ -1470,18 +1471,25 @@ async function handleFormSubmit(e) {
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
+            // 1. Refrescamos el estado para tener los datos reales del Dashboard
             await refreshStateAndUI(); 
             
-            // --- COMPARATIVA DESDE API (Lógica de "vs Mes Pasado") ---
+            // 2. Buscamos la categoría actualizada en el estado LOCAL (que ya tiene el cálculo bien hecho)
+            const currentCat = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
+            
+            // 3. Obtenemos los valores reales
+            const gastoReal = currentCat ? currentCat.llevagastadoenelmes : data.monto;
+            const presupuestoReal = currentCat ? currentCat.presupuesto : 0;
+            // Cálculo matemático simple para el porcentaje
+            const porcentajeReal = (presupuestoReal > 0) ? (gastoReal / presupuestoReal) * 100 : 0;
+
+            // --- COMPARATIVA HISTÓRICA ---
             const comparativa = result.data.comparativa; 
             let comparisonData = null;
 
             if (comparativa) {
                 const gastoMesPasado = comparativa.gastoPasado;
-                // Calculamos cuánto llevamos gastado ahora (del estado actualizado)
-                const currentCat = state.categories.find(c => c.detalle === data.categoria);
-                const gastoActual = currentCat ? currentCat.llevagastadoenelmes : data.monto;
-                const diff = gastoActual - gastoMesPasado;
+                const diff = gastoReal - gastoMesPasado;
                 
                 comparisonData = {
                     mesPasado: comparativa.mesPasado,
@@ -1490,10 +1498,11 @@ async function handleFormSubmit(e) {
                 };
             }
 
+            // 4. Enviamos los datos REALES al Toast
             showConfirmationToast(result.data.receipt, { 
-                presupuesto: state.categories.find(c => c.detalle === data.categoria)?.presupuesto || 0,
-                gastado: state.categories.find(c => c.detalle === data.categoria)?.llevagastadoenelmes || 0,
-                porcentaje: 0 
+                presupuesto: presupuestoReal,
+                gastado: gastoReal,
+                porcentaje: porcentajeReal // <--- ¡AQUÍ ESTABA EL ERROR (antes ponía 0)!
             }, comparisonData);
 
         } else {
