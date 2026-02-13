@@ -1436,72 +1436,94 @@ function renderStep2() {
 
 // main.js - Reemplaza handleFormSubmit
 
-// main.js - CORRECCIÓN handleFormSubmit
+// main.js - Reemplaza SOLAMENTE la función handleFormSubmit
 
-// main.js - Reemplaza handleFormSubmit
 async function handleFormSubmit(e) {
     e.preventDefault();
-    if (!state.selectedCategory) { showToast('Selecciona una categoría.', 'error'); return; }
     
+    // --- CORRECCIÓN CRÍTICA: Eliminamos el bloqueo antiguo ---
+    // if (!state.selectedCategory) ... <--- ESTA LÍNEA ES LA QUE TE DABA EL ERROR, YA NO EXISTE AQUÍ.
+
     const form = e.target;
     const formData = new FormData(form);
-    let detalle = formData.get('detalle');
-    if (state.selectedCategory === 'Super' && !detalle) detalle = form.dataset.supermercado || 'Supermercado';
     
+    // 1. Lógica inteligente para el nombre del detalle
+    let detalle = formData.get('detalle');
+    
+    // Si es Supermercado, gestionamos los botones de Mercadona/Consum
+    if (modalState.category === 'Super') {
+        if (modalState.subCategory === 'Otro') {
+             // Si eligió 'Otro', usamos lo que escribió en el input, o 'Supermercado' si lo dejó vacío
+             if(!detalle) detalle = 'Supermercado';
+        } else {
+             // Si eligió Mercadona o Consum, forzamos ese nombre aunque el input esté vacío
+             detalle = modalState.subCategory || 'Supermercado';
+        }
+    }
+
+    // 2. Construimos el objeto para enviar
     const data = { 
-        categoria: state.selectedCategory, 
+        categoria: modalState.category, // <--- Aquí usamos la variable NUEVA correcta
         monto: parseFloat(formData.get('monto').replace(',', '.')), 
-        detalle, 
+        detalle: detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
 
-    const defaultDate = form.dataset.defaultDate;
-    if (defaultDate) data.fecha = defaultDate;
+    // Validación básica de seguridad
+    if (!data.categoria) {
+        showToast('Error interno: Categoría no definida', 'error');
+        return;
+    }
 
+    if (modalState.defaultDate) data.fecha = modalState.defaultDate;
+
+    // 3. UI: Cerramos y mostramos carga
     closeModal();
-    showLoader('Guardando...');
+    showLoader('Procesando gasto...');
 
     try {
-        const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
+        const action = modalState.defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
-        // Feedback táctil inmediato
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
-            // 1. Refrescamos datos de fondo (sin bloquear al usuario)
-            refreshStateAndUI().then(() => hideLoader());
-
-            // 2. Preparamos los datos para el Toast INMEDIATAMENTE
-            // Usamos los datos que ya tenemos en memoria para no esperar al refresh
-            const catLocal = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
+            // Refrescamos datos
+            await refreshStateAndUI(); 
             
-            const presupuesto = catLocal ? catLocal.presupuesto : 0;
-            // Sumamos el gasto nuevo a lo que ya sabíamos que llevábamos
-            const gastoTotal = (catLocal ? catLocal.llevagastadoenelmes : 0) + (data.esCompartido ? data.monto/2 : data.monto);
-            
-            const budgetInfo = {
-                presupuesto: presupuesto,
-                gastado: gastoTotal,
-                porcentaje: presupuesto > 0 ? (gastoTotal / presupuesto) * 100 : 0
-            };
+            // Preparamos datos para el Toast Premium
+            const comparativa = result.data.comparativa; 
+            let comparisonData = null;
 
-            // 3. Mostramos la confirmación Premium
-            showPremiumToast(result.data.receipt, budgetInfo, result.data.comparativa);
+            if (comparativa) {
+                const gastoMesPasado = comparativa.gastoPasado;
+                // Buscamos el gasto actual en el estado recién actualizado
+                const currentCat = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
+                const gastoActual = currentCat ? currentCat.llevagastadoenelmes : data.monto;
+                const diff = gastoActual - gastoMesPasado;
+                
+                comparisonData = {
+                    mesPasado: comparativa.mesPasado,
+                    gastoPasado: gastoMesPasado,
+                    diferencia: diff
+                };
+            }
+
+            // Mostramos la confirmación bonita
+            showPremiumToast(result.data.receipt, { 
+                presupuesto: state.categories.find(c => c.detalle === data.categoria)?.presupuesto || 0,
+                gastado: state.categories.find(c => c.detalle === data.categoria)?.llevagastadoenelmes || 0,
+                porcentaje: 0 // Se calcula dentro del Toast
+            }, comparisonData);
 
         } else {
-            hideLoader();
             showToast("Gasto olvidado añadido.", 'success');
-            if(result.data && result.data.summary) {
-                // Si viene data actualizada, intentamos refrescar la vista actual
-                const date = new Date(data.fecha);
-                renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
-            }
         }
     } catch (error) { 
-        hideLoader();
         triggerHaptic('warning'); 
         showToast(error.message, 'error'); 
+    } finally { 
+        hideLoader(); 
     }
 }
 
