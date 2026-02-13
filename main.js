@@ -1438,81 +1438,70 @@ function renderStep2() {
 
 // main.js - CORRECCIÓN handleFormSubmit
 
+// main.js - Reemplaza handleFormSubmit
 async function handleFormSubmit(e) {
     e.preventDefault();
+    if (!state.selectedCategory) { showToast('Selecciona una categoría.', 'error'); return; }
+    
     const form = e.target;
     const formData = new FormData(form);
-    
     let detalle = formData.get('detalle');
-    if (modalState.category === 'Super') {
-        if (modalState.subCategory === 'Otro') {
-             if(!detalle) detalle = 'Supermercado';
-        } else {
-             detalle = modalState.subCategory || 'Supermercado';
-        }
-    }
-
+    if (state.selectedCategory === 'Super' && !detalle) detalle = form.dataset.supermercado || 'Supermercado';
+    
     const data = { 
-        categoria: modalState.category, 
+        categoria: state.selectedCategory, 
         monto: parseFloat(formData.get('monto').replace(',', '.')), 
-        detalle: detalle, 
+        detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
 
-    if (modalState.defaultDate) data.fecha = modalState.defaultDate;
+    const defaultDate = form.dataset.defaultDate;
+    if (defaultDate) data.fecha = defaultDate;
 
     closeModal();
-    showLoader('Procesando gasto...');
+    showLoader('Guardando...');
 
     try {
-        const action = modalState.defaultDate ? 'addForgottenExpense' : 'addExpense';
+        const action = defaultDate ? 'addForgottenExpense' : 'addExpense';
         const result = await apiService.call(action, data);
 
+        // Feedback táctil inmediato
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
-            // 1. Refrescamos el estado para tener los datos reales del Dashboard
-            await refreshStateAndUI(); 
+            // 1. Refrescamos datos de fondo (sin bloquear al usuario)
+            refreshStateAndUI().then(() => hideLoader());
+
+            // 2. Preparamos los datos para el Toast INMEDIATAMENTE
+            // Usamos los datos que ya tenemos en memoria para no esperar al refresh
+            const catLocal = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
             
-            // 2. Buscamos la categoría actualizada en el estado LOCAL (que ya tiene el cálculo bien hecho)
-            const currentCat = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
+            const presupuesto = catLocal ? catLocal.presupuesto : 0;
+            // Sumamos el gasto nuevo a lo que ya sabíamos que llevábamos
+            const gastoTotal = (catLocal ? catLocal.llevagastadoenelmes : 0) + (data.esCompartido ? data.monto/2 : data.monto);
             
-            // 3. Obtenemos los valores reales
-            const gastoReal = currentCat ? currentCat.llevagastadoenelmes : data.monto;
-            const presupuestoReal = currentCat ? currentCat.presupuesto : 0;
-            // Cálculo matemático simple para el porcentaje
-            const porcentajeReal = (presupuestoReal > 0) ? (gastoReal / presupuestoReal) * 100 : 0;
+            const budgetInfo = {
+                presupuesto: presupuesto,
+                gastado: gastoTotal,
+                porcentaje: presupuesto > 0 ? (gastoTotal / presupuesto) * 100 : 0
+            };
 
-            // --- COMPARATIVA HISTÓRICA ---
-            const comparativa = result.data.comparativa; 
-            let comparisonData = null;
-
-            if (comparativa) {
-                const gastoMesPasado = comparativa.gastoPasado;
-                const diff = gastoReal - gastoMesPasado;
-                
-                comparisonData = {
-                    mesPasado: comparativa.mesPasado,
-                    gastoPasado: gastoMesPasado,
-                    diferencia: diff
-                };
-            }
-
-            // 4. Enviamos los datos REALES al Toast
-            showConfirmationToast(result.data.receipt, { 
-                presupuesto: presupuestoReal,
-                gastado: gastoReal,
-                porcentaje: porcentajeReal // <--- ¡AQUÍ ESTABA EL ERROR (antes ponía 0)!
-            }, comparisonData);
+            // 3. Mostramos la confirmación Premium
+            showPremiumToast(result.data.receipt, budgetInfo, result.data.comparativa);
 
         } else {
+            hideLoader();
             showToast("Gasto olvidado añadido.", 'success');
+            if(result.data && result.data.summary) {
+                // Si viene data actualizada, intentamos refrescar la vista actual
+                const date = new Date(data.fecha);
+                renderMonthlyAnalysisReport(result.data, date.getFullYear(), date.getMonth() + 1);
+            }
         }
     } catch (error) { 
+        hideLoader();
         triggerHaptic('warning'); 
         showToast(error.message, 'error'); 
-    } finally { 
-        hideLoader(); 
     }
 }
 
@@ -1655,6 +1644,121 @@ function showConfirmationToast(receipt, budgetInfo, comparisonData = null) {
     // Auto-cierre a los 8 segundos para que dé tiempo a leer la comparación
     setTimeout(close, 8000);
 }
+// main.js - AÑADIR AL FINAL (Reemplaza la lógica de showConfirmationToast antigua)
+
+function showPremiumToast(receipt, budgetInfo, comparisonData) {
+    const container = $('#toast-container');
+    if (!container) return;
+    
+    // Limpiamos toasts anteriores
+    container.innerHTML = '';
+
+    const percent = budgetInfo.porcentaje || 0;
+    const isOverBudget = percent > 100;
+    const progressBarColor = isOverBudget ? 'bg-red-500' : 'bg-blue-600';
+    const percentColor = isOverBudget ? 'text-red-600' : 'text-blue-600';
+    
+    // Formateo de moneda
+    const fmt = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+
+    // Lógica de Comparativa (Vs Mes Pasado)
+    let comparisonHTML = '';
+    if (comparisonData) {
+        const diff = comparisonData.diferencia; // Positivo = gastaste más
+        const icon = diff > 0 ? '📈' : '📉';
+        const color = diff > 0 ? 'text-red-500' : 'text-green-600';
+        const text = diff > 0 ? 'más' : 'menos';
+        
+        if (Math.abs(diff) > 1) { // Solo mostrar si la diferencia es relevante (>1€)
+            comparisonHTML = `
+                <div class="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span class="text-gray-400">Vs. mes pasado</span>
+                    <span class="${color} font-bold flex items-center bg-gray-50 px-2 py-1 rounded-full">
+                        ${icon} ${Math.abs(diff).toFixed(0)}€ ${text}
+                    </span>
+                </div>
+            `;
+        }
+    }
+
+    const toastHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 w-full max-w-sm mx-auto animate-toast-entry relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-20 h-20 bg-blue-50 rounded-full -mr-10 -mt-10 z-0"></div>
+            
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <h4 class="text-gray-500 text-xs font-bold uppercase tracking-wider">Gasto Registrado</h4>
+                        <h3 class="text-xl font-bold text-gray-800 mt-1">${receipt.categoria}</h3>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-2xl font-bold text-gray-900">${fmt(receipt.monto)}</span>
+                    </div>
+                </div>
+
+                <div class="mt-3 mb-1">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-gray-500">Presupuesto usado</span>
+                        <span class="font-bold ${percentColor}">${percent.toFixed(0)}%</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-2">
+                        <div class="${progressBarColor} h-2 rounded-full transition-all duration-1000" style="width: ${Math.min(percent, 100)}%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs mt-1 text-gray-400">
+                        <span>Llevas ${fmt(budgetInfo.gastado)}</span>
+                        <span>Meta ${fmt(budgetInfo.presupuesto)}</span>
+                    </div>
+                </div>
+
+                ${comparisonHTML}
+
+                <div class="flex gap-3 mt-4">
+                    <button id="toast-undo-btn" class="flex-1 bg-gray-50 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition border border-gray-200">
+                        Deshacer
+                    </button>
+                    <button id="toast-ok-btn" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-md shadow-blue-200">
+                        Aceptar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = toastHTML;
+
+    // Listeners
+    $('#toast-ok-btn').addEventListener('click', () => {
+        triggerHaptic('light');
+        container.innerHTML = ''; // Cerrar
+    });
+
+    $('#toast-undo-btn').addEventListener('click', () => {
+        triggerHaptic('warning');
+        container.innerHTML = '';
+        // Lógica para borrar el gasto recién creado
+        // Simulamos un clic en el botón de borrar usando el rowid del recibo
+        if (receipt.rowid) {
+            // Creamos un botón falso con los datos necesarios para reutilizar la función handleDelete
+            const fakeBtn = document.createElement('button');
+            fakeBtn.dataset.gasto = JSON.stringify(receipt);
+            fakeBtn.classList.add('delete-btn'); // Clase necesaria para que handleDelete funcione
+            // Hack: Llamamos a la API directamente
+            if(confirm(`¿Borrar el gasto de ${receipt.monto}€ en ${receipt.categoria}?`)) {
+                showLoader('Deshaciendo...');
+                apiService.call('deleteExpense', { rowId: receipt.rowid, categoria: receipt.categoria })
+                    .then(() => {
+                        refreshStateAndUI();
+                        showToast('Operación deshecha', 'info');
+                    })
+                    .catch(e => showToast(e.message, 'error'))
+                    .finally(() => hideLoader());
+            }
+        }
+    });
+
+    // Auto-cierre largo (10 segundos)
+    setTimeout(() => { container.innerHTML = ''; }, 10000);
+}
 
 // --- SERVICIOS Y UTILIDADES ---
 
@@ -1767,11 +1871,25 @@ function normalizeString(str) {
     return str.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, '');
 }
 
+// main.js - Reemplaza injectStyles
 function injectStyles() {
     if (document.getElementById('app-dynamic-styles')) return;
     const style = document.createElement('style');
     style.id = 'app-dynamic-styles';
-    style.innerHTML = `.progress-bar-bg { background-color: #e5e7eb; border-radius: 9999px; height: 0.75rem; overflow: hidden; } .progress-bar-fg { height: 100%; border-radius: 9999px; transition: width 0.5s ease-in-out; } .category-details-container { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; } .category-item.is-open .category-details-container { max-height: 500px; }`;
+    style.innerHTML = `
+        .progress-bar-bg { background-color: #e5e7eb; border-radius: 9999px; height: 0.75rem; overflow: hidden; } 
+        .progress-bar-fg { height: 100%; border-radius: 9999px; transition: width 0.5s ease-in-out; } 
+        .category-details-container { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; } 
+        .category-item.is-open .category-details-container { max-height: 500px; }
+        
+        /* Animaciones para el nuevo Toast Premium */
+        @keyframes slide-up-bounce { 
+            0% { transform: translateY(100%); opacity: 0; } 
+            70% { transform: translateY(-10px); opacity: 1; } 
+            100% { transform: translateY(0); } 
+        }
+        .animate-toast-entry { animation: slide-up-bounce 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+    `;
     document.head.appendChild(style);
 }
 
