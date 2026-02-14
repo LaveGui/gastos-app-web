@@ -1510,11 +1510,18 @@ async function handleFormSubmit(e) {
             }
 
             // Mostramos la confirmación bonita
-            showPremiumToast(result.data.receipt, { 
-                presupuesto: state.categories.find(c => c.detalle === data.categoria)?.presupuesto || 0,
-                gastado: state.categories.find(c => c.detalle === data.categoria)?.llevagastadoenelmes || 0,
-                porcentaje: 0 // Se calcula dentro del Toast
+            // [AHORA] Llamamos al nuevo modal
+            // Dentro de handleFormSubmit (al final del bloque if success)
+
+
+            // 4. Llamada al NUEVO Modal
+            showExpenseSummaryModal(result.data.receipt, { 
+                // Pasamos datos básicos, aunque el modal nuevo no use el porcentaje
+                presupuesto: 0, 
+                gastado: 0,
+                porcentaje: 0 
             }, comparisonData);
+
 
         } else {
             showToast("Gasto olvidado añadido.", 'success');
@@ -1893,7 +1900,7 @@ function normalizeString(str) {
     return str.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, '');
 }
 
-// main.js - Reemplaza injectStyles
+// main.js - Actualiza injectStyles
 function injectStyles() {
     if (document.getElementById('app-dynamic-styles')) return;
     const style = document.createElement('style');
@@ -1904,13 +1911,11 @@ function injectStyles() {
         .category-details-container { max-height: 0; overflow: hidden; transition: max-height 0.5s ease-in-out; } 
         .category-item.is-open .category-details-container { max-height: 500px; }
         
-        /* Animaciones para el nuevo Toast Premium */
-        @keyframes slide-up-bounce { 
-            0% { transform: translateY(100%); opacity: 0; } 
-            70% { transform: translateY(-10px); opacity: 1; } 
-            100% { transform: translateY(0); } 
-        }
-        .animate-toast-entry { animation: slide-up-bounce 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        /* Animaciones del Nuevo Modal de Éxito */
+        .modal-backdrop { opacity: 0; transition: opacity 0.3s ease-out; }
+        .modal-backdrop.visible { opacity: 1; }
+        .modal-card { transform: scale(0.95) translateY(10px); opacity: 0; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .modal-card.visible { transform: scale(1) translateY(0); opacity: 1; }
     `;
     document.head.appendChild(style);
 }
@@ -1935,4 +1940,159 @@ function triggerHaptic(type = 'light') {
 
     // Ejecutamos el patrón
     navigator.vibrate(patterns[type] || 10);
+}
+
+// main.js - AÑADIR AL FINAL (Reemplaza a showPremiumToast)
+
+// main.js - AÑADIR AL FINAL (Sustituye la versión anterior de showExpenseSummaryModal o showPremiumToast)
+
+function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
+    // 1. Limpieza preventiva
+    const existing = document.getElementById('success-modal-overlay');
+    if (existing) existing.remove();
+
+    // 2. Formateo de datos
+    // Muestra decimales correctos (ej: 13,81 €)
+    const formatMoney = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    // 3. Lógica de Comparativa (Solo recurrentes)
+    const RECURRENT_CATEGORIES = ['WiFi', 'Gas', 'Agua', 'Luz', 'Gym', 'Comunidad', 'Hipoteca', 'Alquiler'];
+    const showComparison = RECURRENT_CATEGORIES.some(c => normalizeString(c) === normalizeString(receipt.categoria));
+    
+    let comparisonHTML = '';
+    // Solo mostramos si es categoría recurrente Y tenemos datos históricos
+    if (showComparison && comparisonData) {
+        const diff = comparisonData.diferencia;
+        if (Math.abs(diff) > 0.1) { // Diferencia mínima para mostrar
+            const isMore = diff > 0;
+            const icon = isMore ? '📈' : '📉';
+            const colorClass = isMore ? 'text-orange-600 bg-orange-50' : 'text-green-700 bg-green-50';
+            const text = isMore ? 'más que el mes pasado' : 'menos que el mes pasado';
+            
+            comparisonHTML = `
+                <div class="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-medium ${colorClass} border border-opacity-10 border-gray-500 shadow-sm">
+                    <span class="mr-2 text-lg">${icon}</span>
+                    <span>${formatMoney(Math.abs(diff))} ${text}</span>
+                </div>
+            `;
+        }
+    }
+
+    // 4. HTML Estructura (Centrado y Grande)
+    const modalHTML = `
+        <div id="success-modal-overlay" class="fixed inset-0 z-[100] flex items-center justify-center px-4 modal-backdrop bg-black/60 backdrop-blur-sm">
+            <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 relative modal-card flex flex-col items-center text-center">
+                
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6 shadow-sm">
+                    <span class="text-3xl">✅</span>
+                </div>
+
+                <h3 class="text-gray-500 text-sm font-bold uppercase tracking-wider mb-2">Gasto Guardado</h3>
+                <div class="text-5xl font-black text-gray-900 tracking-tight mb-2">
+                    ${formatMoney(receipt.monto)}
+                </div>
+                <div class="text-xl text-gray-600 font-medium flex items-center gap-2">
+                    <span>${CATEGORY_EMOJIS[receipt.categoria] || '💰'}</span>
+                    <span>${receipt.categoria}</span>
+                </div>
+                <div class="text-sm text-gray-400 mt-1">${receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : ''}</div>
+
+                ${comparisonHTML}
+
+                <div class="grid grid-cols-2 gap-4 w-full mt-8">
+                    <button id="btn-success-edit" class="flex items-center justify-center py-3 px-4 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                        ✏️ Editar
+                    </button>
+                    <button id="btn-success-delete" class="flex items-center justify-center py-3 px-4 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
+                        🗑️ Eliminar
+                    </button>
+                </div>
+                
+                <button id="btn-success-close" class="mt-4 w-full py-4 rounded-xl text-white font-bold text-lg bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all transform active:scale-95">
+                    Listo
+                </button>
+
+                <div class="mt-4 text-xs text-gray-300" id="modal-timer-text">Cerrando en 30s</div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // 5. Activar Animación
+    const overlay = document.getElementById('success-modal-overlay');
+    const card = overlay.querySelector('.modal-card');
+    
+    requestAnimationFrame(() => {
+        overlay.classList.add('visible');
+        card.classList.add('visible');
+    });
+
+    // 6. Funciones de Cierre y Timers
+    let timeLeft = 30;
+    const timerText = document.getElementById('modal-timer-text');
+    
+    const close = () => {
+        overlay.classList.remove('visible');
+        card.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 300);
+    };
+
+    const interval = setInterval(() => {
+        timeLeft--;
+        if (timerText) timerText.textContent = `Cerrando en ${timeLeft}s`;
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            close();
+        }
+    }, 1000);
+
+    const stopTimer = () => clearInterval(interval);
+
+    // 7. Event Listeners
+    
+    // Cerrar al tocar fondo
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            triggerHaptic('light');
+            stopTimer();
+            close();
+        }
+    });
+
+    // Botón Listo
+    document.getElementById('btn-success-close').addEventListener('click', () => {
+        triggerHaptic('light');
+        stopTimer();
+        close();
+    });
+
+    // Botón Editar
+    document.getElementById('btn-success-edit').addEventListener('click', () => {
+        triggerHaptic('medium');
+        stopTimer();
+        close();
+        
+        // Creamos un elemento dummy para reusar handleEditClick
+        // Necesitamos simular la estructura que handleEditClick espera: un botón con dataset.gasto
+        const dummyBtn = document.createElement('button');
+        // Aseguramos que receipt tenga rowid (debería venir de la API)
+        dummyBtn.dataset.gasto = JSON.stringify(receipt);
+        
+        // Llamamos a la función existente
+        handleEditClick({ target: { closest: () => dummyBtn } });
+    });
+
+    // Botón Eliminar
+    document.getElementById('btn-success-delete').addEventListener('click', () => {
+        triggerHaptic('warning');
+        stopTimer();
+        close();
+        
+        const dummyBtn = document.createElement('button');
+        dummyBtn.dataset.gasto = JSON.stringify(receipt);
+        dummyBtn.classList.add('delete-btn'); // Para que la función sepa qué es
+        
+        handleDeleteClick({ target: { closest: () => dummyBtn } });
+    });
 }
