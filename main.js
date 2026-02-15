@@ -1941,10 +1941,7 @@ function triggerHaptic(type = 'light') {
     // Ejecutamos el patrón
     navigator.vibrate(patterns[type] || 10);
 }
-
-// main.js - AÑADIR AL FINAL (Reemplaza a showPremiumToast)
-
-// main.js - AÑADIR AL FINAL (Sustituye la versión anterior de showExpenseSummaryModal o showPremiumToast)
+// main.js - VERSIÓN LIMPIA CON % (Sin barra de progreso)
 
 function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
     // 1. Limpieza preventiva
@@ -1952,26 +1949,30 @@ function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
     if (existing) existing.remove();
 
     // 2. Formateo de datos
-    // Muestra decimales correctos (ej: 13,81 €)
     const formatMoney = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
-    // 3. Lógica de Comparativa (Solo recurrentes)
+    // Cálculos de porcentaje
+    const percent = budgetInfo.porcentaje || 0;
+    const isOverBudget = percent > 100;
+    // Color del texto del porcentaje (Rojo si te pasas, Gris/Azul si vas bien)
+    const percentColor = isOverBudget ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100';
+
+    // 3. Comparativa (Solo recurrentes)
     const RECURRENT_CATEGORIES = ['WiFi', 'Gas', 'Agua', 'Luz', 'Gym', 'Comunidad', 'Hipoteca', 'Alquiler'];
     const showComparison = RECURRENT_CATEGORIES.some(c => normalizeString(c) === normalizeString(receipt.categoria));
     
     let comparisonHTML = '';
-    // Solo mostramos si es categoría recurrente Y tenemos datos históricos
     if (showComparison && comparisonData) {
         const diff = comparisonData.diferencia;
-        if (Math.abs(diff) > 0.1) { // Diferencia mínima para mostrar
+        if (Math.abs(diff) > 0.1) {
             const isMore = diff > 0;
             const icon = isMore ? '📈' : '📉';
-            const colorClass = isMore ? 'text-orange-600 bg-orange-50' : 'text-green-700 bg-green-50';
+            const colorClass = isMore ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-green-700 bg-green-50 border-green-200';
             const text = isMore ? 'más que el mes pasado' : 'menos que el mes pasado';
             
             comparisonHTML = `
-                <div class="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-full text-sm font-medium ${colorClass} border border-opacity-10 border-gray-500 shadow-sm">
-                    <span class="mr-2 text-lg">${icon}</span>
+                <div class="mt-3 inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold ${colorClass} border shadow-sm">
+                    <span class="mr-1.5 text-base">${icon}</span>
                     <span>${formatMoney(Math.abs(diff))} ${text}</span>
                 </div>
             `;
@@ -1981,25 +1982,29 @@ function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
     // 4. HTML Estructura (Centrado y Grande)
     const modalHTML = `
         <div id="success-modal-overlay" class="fixed inset-0 z-[100] flex items-center justify-center px-4 modal-backdrop bg-black/60 backdrop-blur-sm">
-            <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 relative modal-card flex flex-col items-center text-center">
+            <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 relative modal-card flex flex-col items-center text-center">
                 
-                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6 shadow-sm">
-                    <span class="text-3xl">✅</span>
+                <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mb-4 shadow-sm animate-bounce-subtle">
+                    <span class="text-2xl">✅</span>
                 </div>
 
-                <h3 class="text-gray-500 text-sm font-bold uppercase tracking-wider mb-2">Gasto Guardado</h3>
-                <div class="text-5xl font-black text-gray-900 tracking-tight mb-2">
+                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Gasto Guardado</h3>
+                <div class="text-4xl font-black text-gray-900 tracking-tight mb-1">
                     ${formatMoney(receipt.monto)}
                 </div>
-                <div class="text-xl text-gray-600 font-medium flex items-center gap-2">
+                <div class="text-lg text-gray-700 font-medium flex items-center justify-center gap-2">
                     <span>${CATEGORY_EMOJIS[receipt.categoria] || '💰'}</span>
                     <span>${receipt.categoria}</span>
                 </div>
                 <div class="text-sm text-gray-400 mt-1">${receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : ''}</div>
 
+                <div class="mt-3 inline-block px-3 py-1 rounded-full text-sm font-bold border ${percentColor}">
+                    Llevas el ${percent.toFixed(0)}% del presupuesto
+                </div>
+
                 ${comparisonHTML}
 
-                <div class="grid grid-cols-2 gap-4 w-full mt-8">
+                <div class="grid grid-cols-2 gap-3 w-full mt-8">
                     <button id="btn-success-edit" class="flex items-center justify-center py-3 px-4 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
                         ✏️ Editar
                     </button>
@@ -2012,14 +2017,14 @@ function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
                     Listo
                 </button>
 
-                <div class="mt-4 text-xs text-gray-300" id="modal-timer-text">Cerrando en 30s</div>
+                <div class="mt-4 text-[10px] text-gray-300 font-medium" id="modal-timer-text">Cerrando en 30s</div>
             </div>
         </div>
     `;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-    // 5. Activar Animación
+    // 5. Animación de entrada
     const overlay = document.getElementById('success-modal-overlay');
     const card = overlay.querySelector('.modal-card');
     
@@ -2050,49 +2055,28 @@ function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
     const stopTimer = () => clearInterval(interval);
 
     // 7. Event Listeners
-    
-    // Cerrar al tocar fondo
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-            triggerHaptic('light');
-            stopTimer();
-            close();
-        }
+        if (e.target === overlay) { triggerHaptic('light'); stopTimer(); close(); }
     });
 
-    // Botón Listo
     document.getElementById('btn-success-close').addEventListener('click', () => {
-        triggerHaptic('light');
-        stopTimer();
-        close();
+        triggerHaptic('light'); stopTimer(); close();
     });
 
-    // Botón Editar
+    // EDITAR 
     document.getElementById('btn-success-edit').addEventListener('click', () => {
-        triggerHaptic('medium');
-        stopTimer();
-        close();
-        
-        // Creamos un elemento dummy para reusar handleEditClick
-        // Necesitamos simular la estructura que handleEditClick espera: un botón con dataset.gasto
+        triggerHaptic('medium'); stopTimer(); close();
         const dummyBtn = document.createElement('button');
-        // Aseguramos que receipt tenga rowid (debería venir de la API)
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
-        
-        // Llamamos a la función existente
-        handleEditClick({ target: { closest: () => dummyBtn } });
+        setTimeout(() => handleEditClick({ target: { closest: () => dummyBtn } }), 200);
     });
 
-    // Botón Eliminar
+    // ELIMINAR 
     document.getElementById('btn-success-delete').addEventListener('click', () => {
-        triggerHaptic('warning');
-        stopTimer();
-        close();
-        
+        triggerHaptic('warning'); stopTimer(); close();
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
-        dummyBtn.classList.add('delete-btn'); // Para que la función sepa qué es
-        
-        handleDeleteClick({ target: { closest: () => dummyBtn } });
+        dummyBtn.classList.add('delete-btn'); 
+        setTimeout(() => handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
     });
 }
