@@ -1436,40 +1436,28 @@ function renderStep2() {
 
 // main.js - Reemplaza handleFormSubmit
 
-// main.js - Reemplaza SOLAMENTE la función handleFormSubmit
-
 async function handleFormSubmit(e) {
     e.preventDefault();
-    
-    // --- CORRECCIÓN CRÍTICA: Eliminamos el bloqueo antiguo ---
-    // if (!state.selectedCategory) ... <--- ESTA LÍNEA ES LA QUE TE DABA EL ERROR, YA NO EXISTE AQUÍ.
-
     const form = e.target;
     const formData = new FormData(form);
     
-    // 1. Lógica inteligente para el nombre del detalle
+    // 1. Lógica inteligente para el detalle (Supermercados)
     let detalle = formData.get('detalle');
-    
-    // Si es Supermercado, gestionamos los botones de Mercadona/Consum
     if (modalState.category === 'Super') {
         if (modalState.subCategory === 'Otro') {
-             // Si eligió 'Otro', usamos lo que escribió en el input, o 'Supermercado' si lo dejó vacío
              if(!detalle) detalle = 'Supermercado';
         } else {
-             // Si eligió Mercadona o Consum, forzamos ese nombre aunque el input esté vacío
              detalle = modalState.subCategory || 'Supermercado';
         }
     }
 
-    // 2. Construimos el objeto para enviar
     const data = { 
-        categoria: modalState.category, // <--- Aquí usamos la variable NUEVA correcta
+        categoria: modalState.category, 
         monto: parseFloat(formData.get('monto').replace(',', '.')), 
         detalle: detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
     };
 
-    // Validación básica de seguridad
     if (!data.categoria) {
         showToast('Error interno: Categoría no definida', 'error');
         return;
@@ -1477,7 +1465,6 @@ async function handleFormSubmit(e) {
 
     if (modalState.defaultDate) data.fecha = modalState.defaultDate;
 
-    // 3. UI: Cerramos y mostramos carga
     closeModal();
     showLoader('Procesando gasto...');
 
@@ -1488,18 +1475,17 @@ async function handleFormSubmit(e) {
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
-            // Refrescamos datos
-            await refreshStateAndUI(); 
+            // A. Refrescamos datos de fondo
+            refreshStateAndUI(); 
             
-            // Preparamos datos para el Toast Premium
+            // B. Preparamos la comparativa
             const comparativa = result.data.comparativa; 
             let comparisonData = null;
 
             if (comparativa) {
                 const gastoMesPasado = comparativa.gastoPasado;
-                // Buscamos el gasto actual en el estado recién actualizado
-                const currentCat = state.categories.find(c => normalizeString(c.detalle) === normalizeString(data.categoria));
-                const gastoActual = currentCat ? currentCat.llevagastadoenelmes : data.monto;
+                // Para la diferencia, usamos el gasto actual recién devuelto por la API
+                const gastoActual = result.data.budgetInfo.gastado;
                 const diff = gastoActual - gastoMesPasado;
                 
                 comparisonData = {
@@ -1509,19 +1495,14 @@ async function handleFormSubmit(e) {
                 };
             }
 
-            // Mostramos la confirmación bonita
-            // [AHORA] Llamamos al nuevo modal
-            // Dentro de handleFormSubmit (al final del bloque if success)
-
-
-            // 4. Llamada al NUEVO Modal
-            showExpenseSummaryModal(result.data.receipt, { 
-                // Pasamos datos básicos, aunque el modal nuevo no use el porcentaje
-                presupuesto: 0, 
-                gastado: 0,
-                porcentaje: 0 
-            }, comparisonData);
-
+            // C. LLAMADA AL MODAL CORREGIDA
+            // AQUÍ ESTABA EL ERROR: Antes pasábamos un objeto manual con 'porcentaje: 0'
+            // AHORA: Pasamos directamente 'result.data.budgetInfo' que trae el 68% real.
+            showExpenseSummaryModal(
+                result.data.receipt, 
+                result.data.budgetInfo, // <--- ¡ESTO TRAE EL PORCENTAJE REAL!
+                comparisonData
+            );
 
         } else {
             showToast("Gasto olvidado añadido.", 'success');
