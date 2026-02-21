@@ -308,9 +308,7 @@ function renderViewShell(title, content) {
     $('#app-content').innerHTML = `<h1 class="text-2xl font-bold text-gray-800 mb-4">${title}</h1><div class="space-y-6">${content}</div>`;
 }
 
-// main.js - Reemplaza renderDashboardView completa
-
-// main.js - Reemplaza renderDashboardView completa
+// main.js - Reemplaza renderDashboardView COMPLETA
 
 function renderDashboardView() {
     // 1. Datos iniciales
@@ -324,7 +322,6 @@ function renderDashboardView() {
     // 2. Lógica de Alertas
     let alertsHTML = '';
 
-    // ALERTA HIPOTECA (Día 5+)
     const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria).includes('hipoteca'));
     if (currentDay >= 5 && !isMortgagePaid) {
         alertsHTML += `
@@ -337,10 +334,7 @@ function renderDashboardView() {
             </div>`;
     }
 
-    // ALERTA COMUNIDAD (Día 10+)
     const isCommunityPaid = state.monthlyExpenses.some(g => normalizeString(g.categoria) === 'comunidad');
-    
-    // [TRUCO] Si quieres probarlo hoy, cambia el 10 por 1 temporalmente en la siguiente línea:
     if (currentDay >= 10 && !isCommunityPaid) {
         alertsHTML += `
             <div id="community-alert-card" class="bg-orange-50 border-l-4 border-orange-500 p-4 mb-3 rounded-r shadow-sm flex justify-between items-center animate-pulse">
@@ -351,6 +345,9 @@ function renderDashboardView() {
                 <button id="quick-add-community" class="bg-orange-600 text-white text-xs font-bold py-2 px-3 rounded hover:bg-orange-700 shadow">Pagar</button>
             </div>`;
     }
+
+    // --- TEXTO DE GEMINI POR DEFECTO ---
+    const geminiText = state.aiAdvice || "Calculando tus finanzas...";
 
     // 3. Render HTML
     const dashboardHTML = ` 
@@ -372,6 +369,20 @@ function renderDashboardView() {
             <p class="mt-2 font-semibold ${getBudgetColor(totalPercent)}">${totalPercent.toFixed(1)}% del presupuesto total</p>
         </div>
 
+        <div class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[2px] rounded-3xl shadow-md mb-6 animate-fade-in transform transition hover:scale-[1.01]">
+            <div class="bg-white rounded-[22px] p-5 h-full">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-lg shadow-sm">
+                        ✨
+                    </div>
+                    <h3 class="font-bold text-gray-800 text-sm tracking-wide">Gemini Insights</h3>
+                </div>
+                <p class="text-sm text-gray-600 font-medium italic leading-relaxed">
+                    "${geminiText}"
+                </p>
+            </div>
+        </div>
+
         <div id="distribution-area" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="budget-list" class="space-y-3"></div>
             <div id="distribution-chart-card" class="bg-white rounded-lg shadow p-4">
@@ -385,18 +396,15 @@ function renderDashboardView() {
 
     // --- 4. LISTENERS CORREGIDOS ---
 
-    // Listener Hipoteca
     const quickMortgageBtn = document.getElementById('quick-add-mortgage');
     if (quickMortgageBtn) {
         quickMortgageBtn.addEventListener('click', () => {
             triggerHaptic('medium');
             openModal();
-            // Corrección: Buscar y hacer clic visual en el botón
             setTimeout(() => {
                 const buttons = document.querySelectorAll('.category-btn');
-                // Buscamos "Hipoteca" ignorando mayúsculas/acentos
                 const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category).includes('hipoteca'));
-                if (btn) btn.click(); // <--- ESTO ACTIVA LA SELECCIÓN VISUAL
+                if (btn) btn.click();
                 
                 const montoInput = document.getElementById('monto');
                 if(montoInput) montoInput.value = "734.25"; 
@@ -404,35 +412,27 @@ function renderDashboardView() {
         });
     }
 
-    // Listener Comunidad
     const quickCommunityBtn = document.getElementById('quick-add-community');
     if (quickCommunityBtn) {
         quickCommunityBtn.addEventListener('click', () => {
             triggerHaptic('medium');
             openModal();
-            // Corrección: Buscar y hacer clic visual en el botón
             setTimeout(() => {
                 const buttons = document.querySelectorAll('.category-btn');
-                // Buscamos "Comunidad"
                 const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category) === 'comunidad');
                 
                 if (btn) {
-                    btn.click(); // <--- ESTO ACTIVA LA SELECCIÓN VISUAL (Borde azul)
-                    
-                    // Buscar presupuesto automático
+                    btn.click();
                     const comCategory = state.categories.find(c => normalizeString(c.detalle) === 'comunidad');
                     if (comCategory && comCategory.presupuesto > 0) {
                         const montoInput = document.getElementById('monto');
                         if(montoInput) montoInput.value = comCategory.presupuesto.toString(); 
                     }
-                } else {
-                    console.warn("No encontré el botón de Comunidad. Revisa el nombre en Excel.");
                 }
             }, 50);
         });
     }
 
-    // Listener Refrescar
     const refreshBtn = document.getElementById('refresh-dashboard');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
@@ -442,7 +442,6 @@ function renderDashboardView() {
         });
     }
 
-    // Renderizado de listas (sin cambios)
     try {
         if (state.categories && state.categories.length > 0) {
             updateBudgetList(state.categories);
@@ -1902,13 +1901,17 @@ async function handleFormSubmit(e) {
     }
 }
 
-function updateStateAfterAddExpense(receipt) {
-    showLoader('Añadiendo gasto...');
-    return refreshStateAndUI().then(() => {
-        const cat = receipt?.categoria || receipt?.detalle || 'categoría';
-        updateLastUpdatedTime(`Gasto añadido en ${cat}`);
-        hideLoader();
-    }).catch(err => { hideLoader(); throw err; });
+function updateState(data) {
+    if (data.summary) {
+        state.totalSummary = data.summary.find(item => item.detalle?.toLowerCase() === 'total');
+        state.categories = data.summary.filter(item => item.detalle?.toLowerCase() !== 'total' && item.presupuesto > 0);
+    }
+    if (data.huchas) state.huchas = data.huchas;
+    if (data.history) state.history = data.history;
+    if (data.monthlyExpenses) state.monthlyExpenses = data.monthlyExpenses;
+    
+    // --- NUEVA LÍNEA PARA GEMINI ---
+    if (data.aiAdvice) state.aiAdvice = data.aiAdvice;
 }
 
 async function handleEditClick(e) {
