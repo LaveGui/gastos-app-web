@@ -508,12 +508,22 @@ function updateBudgetList(categories) {
     }).join('');
 }
 
-// main.js - REEMPLAZA LA FUNCIÓN renderGastosView COMPLETA
+// main.js - Variable de estado para los gastos fijos (Añadir justo encima de la función)
+let showFixedExpenses = false;
 
+// Reemplaza la función renderGastosView COMPLETA
 async function renderGastosView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
 
-    // 1. Cálculos Matemáticos (Agrupar por días)
+    // 1. Lógica de Filtrado Inteligente
+    const FIXED_CATEGORIES = ['Hipoteca', 'Gym', 'WiFi', 'Luz', 'Gas', 'Comunidad'];
+    
+    // Filtramos la lista principal dependiendo de si el botón está activado o no
+    const expensesToProcess = showFixedExpenses 
+        ? state.monthlyExpenses 
+        : state.monthlyExpenses.filter(gasto => !FIXED_CATEGORIES.includes(gasto.categoria));
+
+    // 2. Cálculos Matemáticos (Agrupar por días usando la lista filtrada)
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -524,23 +534,18 @@ async function renderGastosView() {
     let totalMonth = 0;
     let totalWeek = 0;
 
-    // Calcular qué día fue el Lunes de esta semana
-    const dayOfWeek = now.getDay() || 7; // Convertimos Domingo (0) a 7 para lógica europea
+    const dayOfWeek = now.getDay() || 7; 
     const startOfWeek = new Date(year, month, currentDay - dayOfWeek + 1);
     startOfWeek.setHours(0, 0, 0, 0);
 
-    // Procesar los gastos del mes
-    state.monthlyExpenses.forEach(gasto => {
+    expensesToProcess.forEach(gasto => {
         const date = new Date(gasto.fecha);
         const day = date.getDate();
         const monto = parseFloat(gasto.monto) || 0;
         
-        // Asegurar que sumamos los gastos del mes correcto
         if (date.getMonth() === month && date.getFullYear() === year) {
             dailyTotals[day - 1] += monto;
             totalMonth += monto;
-            
-            // Si el gasto fue de este lunes en adelante...
             if (date >= startOfWeek) {
                 totalWeek += monto;
             }
@@ -549,17 +554,22 @@ async function renderGastosView() {
 
     const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
 
-    // 2. HTML: Gráfico + Lista
+    // 3. HTML: Gráfico + Lista + Botón Toggle
     const html = `
         <div class="bg-white p-5 rounded-2xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
-            <div class="flex justify-between items-end mb-4">
+            <div class="flex justify-between items-start mb-4">
                 <div>
                     <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Ritmo de Gasto</h2>
                     <p class="text-sm text-gray-500">Media: <span class="font-bold text-gray-800">${gastoMedio.toLocaleString('es-ES', formatOptions)}/día</span></p>
                 </div>
-                <div class="text-right">
-                    <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Esta Semana</p>
-                    <p class="text-2xl font-black text-blue-600 leading-none">${totalWeek.toLocaleString('es-ES', formatOptions)}</p>
+                <div class="flex flex-col items-end">
+                    <button id="toggle-fixed-btn" class="mb-2 text-[10px] px-3 py-1.5 rounded-full border transition-all active:scale-95 ${showFixedExpenses ? 'bg-blue-50 text-blue-600 border-blue-200 font-bold' : 'bg-gray-50 text-gray-400 border-gray-200'}">
+                        ${showFixedExpenses ? '👁️ Fijos Visibles' : '🙈 Fijos Ocultos'}
+                    </button>
+                    <div class="text-right">
+                        <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Esta Semana</p>
+                        <p class="text-xl font-black text-blue-600 leading-none">${totalWeek.toLocaleString('es-ES', formatOptions)}</p>
+                    </div>
                 </div>
             </div>
             
@@ -568,25 +578,28 @@ async function renderGastosView() {
             </div>
         </div>
         
-        <h2 class="text-lg font-bold text-gray-800 mb-3 px-1">Todos los Gastos</h2>
-        <div id="expenses-list" class="space-y-3 pb-8">
-            <div class="text-center text-gray-400 animate-pulse py-4">Cargando...</div>
-        </div>
+        <h2 class="text-lg font-bold text-gray-800 mb-3 px-1">Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}</h2>
+        <div id="expenses-list" class="space-y-3 pb-8"></div>
     `;
 
-    // Usamos el contenedor general
     renderViewShell('Gastos', html);
 
-    // 3. Dibujar el Gráfico con Chart.js
+    // 4. Listeners del nuevo botón
+    document.getElementById('toggle-fixed-btn').addEventListener('click', () => {
+        if (typeof triggerHaptic === 'function') triggerHaptic('light');
+        showFixedExpenses = !showFixedExpenses;
+        renderGastosView(); // Volvemos a pintar la vista entera al instante
+    });
+
+    // 5. Dibujar el Gráfico
     const ctx = document.getElementById('daily-expenses-chart');
     if (ctx) {
         new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: Array.from({length: daysInMonth}, (_, i) => i + 1), // Días del 1 al 31
+                labels: Array.from({length: daysInMonth}, (_, i) => i + 1),
                 datasets: [{
                     data: dailyTotals,
-                    // Destacar el día de HOY en naranja, el resto en azul suave
                     backgroundColor: dailyTotals.map((_, i) => (i + 1) === currentDay ? '#f97316' : '#93c5fd'),
                     borderRadius: 4,
                     borderSkipped: false
@@ -608,11 +621,7 @@ async function renderGastosView() {
                 scales: {
                     x: { 
                         grid: { display: false },
-                        ticks: { 
-                            maxTicksLimit: 15, 
-                            font: { size: 10 },
-                            color: '#9ca3af'
-                        },
+                        ticks: { maxTicksLimit: 15, font: { size: 10 }, color: '#9ca3af' },
                         border: { display: false }
                     },
                     y: { 
@@ -620,9 +629,7 @@ async function renderGastosView() {
                         border: { display: false },
                         grid: { color: '#f3f4f6' },
                         ticks: { 
-                            maxTicksLimit: 5, 
-                            font: { size: 10 },
-                            color: '#9ca3af',
+                            maxTicksLimit: 5, font: { size: 10 }, color: '#9ca3af',
                             callback: (val) => val + '€'
                         }
                     }
@@ -631,10 +638,10 @@ async function renderGastosView() {
         });
     }
 
-    // 4. Renderizar la Lista de Gastos
+    // 6. Renderizar la Lista Filtrada
     const listContainer = $('#expenses-list');
-    if (state.monthlyExpenses.length > 0) {
-        listContainer.innerHTML = state.monthlyExpenses.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
+    if (expensesToProcess.length > 0) {
+        listContainer.innerHTML = expensesToProcess.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
@@ -660,8 +667,8 @@ async function renderGastosView() {
         listContainer.innerHTML = `
             <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
                 <div class="text-4xl mb-3 opacity-50">🍃</div>
-                <p class="text-gray-500 font-medium">Aún no hay gastos este mes.</p>
-                <p class="text-xs text-gray-400 mt-1">Tus compras aparecerán aquí.</p>
+                <p class="text-gray-500 font-medium">Todo limpio.</p>
+                <p class="text-xs text-gray-400 mt-1">No hay gastos para mostrar con estos filtros.</p>
             </div>`; 
     }
 }
