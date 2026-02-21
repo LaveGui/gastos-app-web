@@ -1000,6 +1000,8 @@ async function handleMonthSelection(e) {
     }
 }
 
+// main.js - REEMPLAZA LA FUNCIÓN renderMonthlyAnalysisReport COMPLETA
+
 function renderMonthlyAnalysisReport(data, year, month) {
     const container = $('#monthly-analysis-content');
     if (!container) return;
@@ -1007,6 +1009,7 @@ function renderMonthlyAnalysisReport(data, year, month) {
     container.expenseDetails = data.expenseDetails || [];
     const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
+    // 1. Lógica de Estado del Mes (Botones)
     let actionButtonsHTML = '';
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1015,57 +1018,164 @@ function renderMonthlyAnalysisReport(data, year, month) {
 
     if (isReviewPeriod) {
         actionButtonsHTML = `
-            <div class="my-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center space-y-3">
-                <p class="text-sm text-blue-700 font-semibold">Este mes está en período de revisión.</p>
-                <div>
-                    <button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-white border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-100 transition">+ Añadir Gasto Olvidado</button>
-                    <button id="archive-month-btn" data-year="${year}" data-month="${month}" class="ml-2 bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition">✔ Cerrar y Archivar Mes</button>
+            <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-2xl text-center shadow-sm">
+                <p class="text-sm text-yellow-800 font-bold mb-3">⚠️ Este mes está en período de revisión</p>
+                <div class="flex flex-col sm:flex-row gap-2 justify-center">
+                    <button id="add-forgotten-expense-btn" data-year="${year}" data-month="${month}" class="bg-white border border-yellow-300 text-yellow-800 text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-yellow-100 transition shadow-sm">
+                        + Gasto Olvidado
+                    </button>
+                    <button id="archive-month-btn" data-year="${year}" data-month="${month}" class="bg-yellow-500 text-white text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-yellow-600 transition shadow-sm">
+                        🔒 Cerrar y Archivar
+                    </button>
                 </div>
             </div>`;
     }
 
+    // 2. Tarjeta de Balance Emocional (Resumen Principal)
     const summary = data.summary;
-    const netResultColor = summary.netResultStatus === 'ahorro' ? 'text-green-600' : 'text-red-600';
-    const netResultText = summary.netResultStatus === 'ahorro' ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Superaste tu presupuesto en ${formatCurrency(Math.abs(summary.netResult))}`;
-    const netResultPercent = summary.totalBudget > 0 ? `(${(summary.totalSpent / summary.totalBudget * 100).toFixed(1)}% de tu presupuesto)` : '';
+    const isAhorro = summary.netResultStatus === 'ahorro';
+    const gradientClass = isAhorro ? 'bg-gradient-to-br from-green-500 to-emerald-600' : 'bg-gradient-to-br from-rose-500 to-red-600';
+    const icon = isAhorro ? '🎉' : '⚠️';
+    const netResultText = isAhorro ? `Ahorraste ${formatCurrency(summary.netResult)}` : `Te pasaste por ${formatCurrency(Math.abs(summary.netResult))}`;
+    const percentUsed = summary.totalBudget > 0 ? (summary.totalSpent / summary.totalBudget * 100) : 0;
     
-    const summaryHTML = `<div class="bg-gray-50 rounded-lg p-4 mb-2 text-center"><p class="text-lg font-semibold ${netResultColor}">${netResultText}</p><p class="text-sm text-gray-600">Gastaste ${formatCurrency(summary.totalSpent)} de un presupuesto de ${formatCurrency(summary.totalBudget)} ${netResultPercent}.</p></div>`;
+    const summaryWidget = `
+        <div class="${gradientClass} rounded-3xl p-6 text-white shadow-lg mb-4 transform transition hover:scale-[1.01]">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <p class="text-white/80 text-xs font-bold uppercase tracking-wider mb-1">Balance del Mes</p>
+                    <p class="text-2xl font-black flex items-center gap-2">${icon} ${netResultText}</p>
+                </div>
+            </div>
+            
+            <div class="mb-2">
+                <div class="flex justify-between text-sm font-medium mb-1">
+                    <span>Gastado: ${formatCurrency(summary.totalSpent)}</span>
+                    <span>${percentUsed.toFixed(0)}%</span>
+                </div>
+                <div class="w-full bg-white/20 rounded-full h-2">
+                    <div class="bg-white h-2 rounded-full" style="width: ${Math.min(percentUsed, 100)}%"></div>
+                </div>
+                <div class="text-right text-xs text-white/70 mt-1">Presupuesto: ${formatCurrency(summary.totalBudget)}</div>
+            </div>
+        </div>
+    `;
 
-    let othersHTML = '';
-    if (data.othersBreakdown && data.othersBreakdown.length > 0) {
-        const rows = data.othersBreakdown.map(i => `<tr class="border-b border-gray-200 last:border-b-0"><td class="py-2 pr-2">${i.category}</td><td class="py-2 pr-2 text-right font-medium">${formatCurrency(i.amount)}</td></tr>`).join('');
-        othersHTML = `<div class="bg-gray-100 p-3 rounded-lg mt-4"><h5 class="font-bold text-gray-600 text-sm mb-2">Desglose de "Otros"</h5><table class="w-full text-sm"><tbody>${rows}</tbody></table></div>`;
+    // 3. Píldoras de Insights (Mayor gasto y Transacciones)
+    let topCategory = null;
+    if (data.categoryAnalysis && data.categoryAnalysis.length > 0) {
+        topCategory = data.categoryAnalysis.reduce((prev, current) => (prev.currentAmount > current.currentAmount) ? prev : current);
     }
+    const totalTx = data.categoryAnalysis ? data.categoryAnalysis.reduce((sum, cat) => sum + (cat.transactionCount || 0), 0) : 0;
 
-    let funFactsHTML = '';
-    if (data.funFacts && Object.keys(data.funFacts).length > 0) {
-        const ff = data.funFacts;
-        const sf = ff.supermarket ? `<li>Fuiste al súper <strong>${ff.supermarket.transactionCount} veces</strong>. Comercio más visitado: <strong>${ff.supermarket.mostFrequentStore}</strong>.</li>` : '';
-        const af = (ff.activityFrequency || []).map(a => `<li><strong>${a.count}</strong> gastos en <strong>${a.category}</strong>.</li>`).join('');
-        funFactsHTML = `<div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mt-6"><h4 class="font-bold text-blue-800 mb-2">Sabías que...</h4><ul class="list-disc list-inside text-sm text-blue-700 space-y-2">${sf}${af}</ul></div>`;
-    }
+    const insightsGrid = `
+        <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Mayor Gasto</span>
+                <span class="text-3xl mb-1">${topCategory ? (CATEGORY_EMOJIS[topCategory.category] || '💸') : '🤷‍♂️'}</span>
+                <span class="font-bold text-gray-800 text-sm truncate w-full">${topCategory ? topCategory.category : '-'}</span>
+                <span class="text-rose-500 font-black">${topCategory ? formatCurrency(topCategory.currentAmount) : '0 €'}</span>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Actividad</span>
+                <span class="text-3xl mb-1">💳</span>
+                <span class="font-bold text-gray-800 text-sm truncate w-full">Transacciones</span>
+                <span class="text-blue-600 font-black text-lg">${totalTx} este mes</span>
+            </div>
+        </div>
+    `;
 
+    // 4. Gráfico Doughnut Centrado
+    const chartSection = `
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
+            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-4">Distribución de Gastos</h4>
+            <div class="h-56 relative">
+                <canvas id="monthly-doughnut-chart"></canvas>
+            </div>
+        </div>
+    `;
+
+    // 5. Lista de Categorías (Estilo acordeón mejorado)
     const categoryAnalysisHTML = (data.categoryAnalysis || []).map((cat) => {
-        let variationHTML = `<span class="text-sm font-medium text-gray-500">=</span>`;
+        let variationHTML = `<span class="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">= Igual</span>`;
         if (cat.variationStatus && cat.variationStatus !== 'estable') {
             const v = cat.variationPercent || 0;
-            if (cat.variationStatus === 'aumento') variationHTML = `<span class="text-sm font-semibold text-red-500">▲ ${v.toFixed(1)}%</span>`;
-            else if (cat.variationStatus === 'descenso') variationHTML = `<span class="text-sm font-semibold text-green-600">▼ ${v.toFixed(1)}%</span>`;
+            if (cat.variationStatus === 'aumento') variationHTML = `<span class="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-100">▲ ${v.toFixed(0)}%</span>`;
+            else if (cat.variationStatus === 'descenso') variationHTML = `<span class="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100">▼ ${v.toFixed(0)}%</span>`;
         }
-        return `<div class="report-category-item cursor-pointer hover:bg-gray-100 p-3 rounded-lg" data-category="${cat.category}"><div class="flex justify-between items-center"><div class="flex items-center"><span class="text-lg mr-3">${CATEGORY_EMOJIS[cat.category] || '📊'}</span><div><p class="font-bold text-gray-800">${cat.category}</p>${cat.transactionCount > 0 ? `<p class="text-xs text-gray-500">${cat.transactionCount} transacciones</p>` : ''}</div></div><div class="text-right"><p class="font-bold text-gray-900">${formatCurrency(cat.currentAmount)}</p>${variationHTML}</div></div><div class="category-expense-details mt-2 pl-8 border-l-2 border-gray-200" style="display: none;"></div></div>`;
+        return `
+            <div class="report-category-item cursor-pointer bg-white border border-gray-100 hover:border-blue-300 transition-colors p-3 rounded-2xl shadow-sm" data-category="${cat.category}">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-xl border border-gray-100">
+                            ${CATEGORY_EMOJIS[cat.category] || '📊'}
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-800 text-sm">${cat.category}</p>
+                            ${cat.transactionCount > 0 ? `<p class="text-[10px] text-gray-400 uppercase tracking-wider">${cat.transactionCount} movs</p>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-right flex flex-col items-end gap-1">
+                        <p class="font-black text-gray-900">${formatCurrency(cat.currentAmount)}</p>
+                        ${variationHTML}
+                    </div>
+                </div>
+                <div class="category-expense-details mt-3 pt-3 border-t border-gray-100" style="display: none;"></div>
+            </div>`;
     }).join('');
 
-    container.innerHTML = `${summaryHTML}${actionButtonsHTML}<div class="h-64 mb-2"><canvas id="monthly-doughnut-chart"></canvas></div>${othersHTML}${funFactsHTML}<div class="mt-6"><h4 class="font-bold text-gray-700 mb-2">Desglose de Categorías</h4><div id="category-list-container" class="space-y-1">${categoryAnalysisHTML}</div></div>`;
+    const categoryListSection = `
+        <div>
+            <h4 class="text-sm font-bold text-gray-700 mb-3 px-1">Desglose Detallado</h4>
+            <div id="category-list-container" class="space-y-2 pb-6">${categoryAnalysisHTML}</div>
+        </div>
+    `;
 
+    // Renderizamos todo el bloque HTML
+    container.innerHTML = `
+        <div class="animate-fade-in">
+            ${actionButtonsHTML}
+            ${summaryWidget}
+            ${insightsGrid}
+            ${chartSection}
+            ${categoryListSection}
+        </div>
+    `;
+
+    // Activamos el Gráfico de Chart.js
     const chartData = data.chartData || [];
     if(chartData.length > 0) {
         new Chart($('#monthly-doughnut-chart').getContext('2d'), {
             type: 'doughnut',
             data: {
                 labels: chartData.map(c => c.category),
-                datasets: [{ data: chartData.map(c => c.currentAmount), backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7', '#6b7280'], borderColor: '#fff', borderWidth: 2 }]
+                datasets: [{ 
+                    data: chartData.map(c => c.currentAmount), 
+                    // Paleta de colores más moderna y suave
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'], 
+                    borderColor: '#ffffff', 
+                    borderWidth: 3,
+                    hoverOffset: 4
+                }]
             },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false } } }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                cutout: '65%', 
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed !== null) label += formatCurrency(context.parsed);
+                                return label;
+                            }
+                        }
+                    }
+                } 
+            }
         });
     }
 }
