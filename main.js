@@ -511,19 +511,18 @@ function updateBudgetList(categories) {
 // main.js - Variable de estado para los gastos fijos (Añadir justo encima de la función)
 let showFixedExpenses = false;
 
-// Reemplaza la función renderGastosView COMPLETA
+// main.js - Reemplaza renderGastosView COMPLETA
+
 async function renderGastosView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
 
-    // 1. Lógica de Filtrado Inteligente
+    // 1. Lógica de Filtrado Inteligente (Fijos)
     const FIXED_CATEGORIES = ['Hipoteca', 'Gym', 'WiFi', 'Luz', 'Gas', 'Comunidad'];
-    
-    // Filtramos la lista principal dependiendo de si el botón está activado o no
     const expensesToProcess = showFixedExpenses 
         ? state.monthlyExpenses 
         : state.monthlyExpenses.filter(gasto => !FIXED_CATEGORIES.includes(gasto.categoria));
 
-    // 2. Cálculos Matemáticos (Agrupar por días usando la lista filtrada)
+    // 2. Cálculos Matemáticos
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -554,12 +553,31 @@ async function renderGastosView() {
 
     const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
 
-    // 3. HTML: Gráfico + Lista + Botón Toggle
+    // --- 🎮 NUEVO: LÓGICA DE GAMIFICACIÓN (DÍAS CERO) ---
+    let diasCeroCount = 0;
+    let rachaActual = 0;
+    
+    // Solo evaluamos desde el día 1 hasta el día de HOY
+    for (let i = 0; i < currentDay; i++) {
+        if (dailyTotals[i] === 0) {
+            diasCeroCount++;
+            rachaActual++;
+        } else {
+            rachaActual = 0; // Se rompe la racha si gastas
+        }
+    }
+    // ----------------------------------------------------
+
+    // 3. HTML: Gráfico + Lista + Botón Toggle + Badges
     const html = `
-        <div class="bg-white p-5 rounded-2xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
+        <div class="bg-white p-5 rounded-3xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
             <div class="flex justify-between items-start mb-4">
                 <div>
-                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Ritmo de Gasto</h2>
+                    <div class="flex items-center gap-2 mb-1">
+                        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ritmo de Gasto</h2>
+                        ${diasCeroCount > 0 ? `<span class="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center shadow-sm">🌟 ${diasCeroCount} DÍAS CERO</span>` : ''}
+                        ${rachaActual >= 2 ? `<span class="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center shadow-sm animate-pulse">🔥 RACHA: ${rachaActual}</span>` : ''}
+                    </div>
                     <p class="text-sm text-gray-500">Media: <span class="font-bold text-gray-800">${gastoMedio.toLocaleString('es-ES', formatOptions)}/día</span></p>
                 </div>
                 <div class="flex flex-col items-end">
@@ -584,12 +602,39 @@ async function renderGastosView() {
 
     renderViewShell('Gastos', html);
 
-    // 4. Listeners del nuevo botón
+    // 4. Listeners del toggle
     document.getElementById('toggle-fixed-btn').addEventListener('click', () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('light');
         showFixedExpenses = !showFixedExpenses;
-        renderGastosView(); // Volvemos a pintar la vista entera al instante
+        renderGastosView(); 
     });
+
+    // --- 🎮 NUEVO: PLUGIN PARA DIBUJAR ESTRELLAS EN CHART.JS ---
+    const zeroSpendPlugin = {
+        id: 'zeroSpendPlugin',
+        afterDatasetsDraw(chart) {
+            const { ctx, data, chartArea: { bottom } } = chart;
+            ctx.save();
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            
+            const dataset = data.datasets[0];
+            const currentDayIndex = new Date().getDate() - 1;
+
+            dataset.data.forEach((value, index) => {
+                // Dibujamos la estrella solo si el gasto es 0 y el día ya pasó (o es hoy)
+                if (value === 0 && index <= currentDayIndex) {
+                    const meta = chart.getDatasetMeta(0);
+                    const xPos = meta.data[index].x;
+                    // Dibujar la estrellita justo encima de la base
+                    ctx.fillText('🌟', xPos, bottom - 2);
+                }
+            });
+            ctx.restore();
+        }
+    };
+    // -------------------------------------------------------------
 
     // 5. Dibujar el Gráfico
     const ctx = document.getElementById('daily-expenses-chart');
@@ -614,27 +659,19 @@ async function renderGastosView() {
                         displayColors: false,
                         callbacks: {
                             title: (context) => `Día ${context[0].label}`,
-                            label: (context) => context.parsed.y.toLocaleString('es-ES', formatOptions)
+                            label: (context) => {
+                                const val = context.parsed.y;
+                                return val === 0 ? '🌟 ¡Día Cero!' : val.toLocaleString('es-ES', formatOptions);
+                            }
                         }
                     }
                 },
                 scales: {
-                    x: { 
-                        grid: { display: false },
-                        ticks: { maxTicksLimit: 15, font: { size: 10 }, color: '#9ca3af' },
-                        border: { display: false }
-                    },
-                    y: { 
-                        beginAtZero: true, 
-                        border: { display: false },
-                        grid: { color: '#f3f4f6' },
-                        ticks: { 
-                            maxTicksLimit: 5, font: { size: 10 }, color: '#9ca3af',
-                            callback: (val) => val + '€'
-                        }
-                    }
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { size: 10 }, color: '#9ca3af' }, border: { display: false } },
+                    y: { beginAtZero: true, border: { display: false }, grid: { color: '#f3f4f6' }, ticks: { maxTicksLimit: 5, font: { size: 10 }, color: '#9ca3af', callback: (val) => val + '€' } }
                 }
-            }
+            },
+            plugins: [zeroSpendPlugin] // Activamos el plugin de las estrellas
         });
     }
 
