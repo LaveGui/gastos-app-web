@@ -1963,18 +1963,66 @@ function showToast(message, type = 'success') {
     animation.onfinish = () => toast.remove();
 }
 
-function showLoader(message = 'Cargando...') {
-    if (document.getElementById('global-loader')) return;
-    const loader = document.createElement('div');
-    loader.id = 'global-loader';
-    loader.className = 'fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50';
-    loader.innerHTML = `<div class="bg-white p-4 rounded-lg flex flex-col items-center shadow"><div style="width:40px;height:40px;border-radius:9999px;border:4px solid #e5e7eb;border-top-color:#3b82f6;animation:spin 1s linear infinite"></div><p class="text-sm text-gray-700 mt-2">${message}</p></div>`;
-    if (!document.getElementById('loader-spin-style')) {
-        const s = document.createElement('style'); s.id = 'loader-spin-style'; s.innerHTML = `@keyframes spin { to { transform: rotate(360deg); } }`; document.head.appendChild(s);
-    }
-    document.body.appendChild(loader);
+let loaderInterval; // Variable global para controlar el temporizador de los mensajes
+
+function showLoader(initialText = 'Iniciando...') {
+    hideLoader(); // Limpiamos si hubiera otro loader colgado
+
+    const loaderHTML = `
+        <div id="app-loader" class="fixed inset-0 bg-white/90 backdrop-blur-md z-[200] flex flex-col items-center justify-center transition-opacity duration-300">
+            <div class="relative w-20 h-20 mb-6">
+                <div class="absolute inset-0 border-4 border-blue-100 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center text-2xl animate-pulse">💸</div>
+            </div>
+            
+            <p id="loader-text" class="text-gray-700 font-bold text-lg transition-all duration-300 ease-in-out">${initialText}</p>
+            <p class="text-xs text-gray-400 mt-2 font-medium uppercase tracking-widest">No cierres la app</p>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', loaderHTML);
+
+    // Array de mensajes narrativos
+    const messages = [
+        "📡 Conectando con tu hoja de cálculo...",
+        "✍️ Escribiendo los datos del gasto...",
+        "🧮 Recalculando tu presupuesto mensual...",
+        "✨ Dando los últimos retoques..."
+    ];
+
+    let msgIndex = 0;
+    const textElement = document.getElementById('loader-text');
+    
+    // Cambiar el texto cada 1.2 segundos
+    loaderInterval = setInterval(() => {
+        if (textElement) {
+            // Pequeño efecto de parpadeo suave al cambiar el texto
+            textElement.style.opacity = '0'; 
+            textElement.style.transform = 'translateY(5px)';
+            
+            setTimeout(() => {
+                textElement.innerText = messages[msgIndex];
+                textElement.style.opacity = '1';
+                textElement.style.transform = 'translateY(0)';
+                
+                // Avanzamos al siguiente mensaje (se queda en el último si tarda mucho)
+                if (msgIndex < messages.length - 1) {
+                    msgIndex++;
+                }
+            }, 300); // 300ms de transición
+        }
+    }, 1200); 
 }
-function hideLoader() { const l = document.getElementById('global-loader'); if (l) l.remove(); }
+
+function hideLoader() {
+    if (loaderInterval) clearInterval(loaderInterval); // Detenemos los mensajes
+    const loader = document.getElementById('app-loader');
+    if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 300);
+    }
+}
 
 function updateLastUpdatedTime(actionInfo = '') {
     state.lastUpdated = new Date();
