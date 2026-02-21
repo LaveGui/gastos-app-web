@@ -508,27 +508,161 @@ function updateBudgetList(categories) {
     }).join('');
 }
 
-// 2. GASTOS
+// main.js - REEMPLAZA LA FUNCIÓN renderGastosView COMPLETA
+
 async function renderGastosView() {
-    renderViewShell('Gastos del Mes', '<div id="expenses-list" class="space-y-3"><div class="text-center text-gray-400 animate-pulse">Cargando...</div></div>');
+    const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
+
+    // 1. Cálculos Matemáticos (Agrupar por días)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const currentDay = now.getDate();
+
+    let dailyTotals = new Array(daysInMonth).fill(0);
+    let totalMonth = 0;
+    let totalWeek = 0;
+
+    // Calcular qué día fue el Lunes de esta semana
+    const dayOfWeek = now.getDay() || 7; // Convertimos Domingo (0) a 7 para lógica europea
+    const startOfWeek = new Date(year, month, currentDay - dayOfWeek + 1);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Procesar los gastos del mes
+    state.monthlyExpenses.forEach(gasto => {
+        const date = new Date(gasto.fecha);
+        const day = date.getDate();
+        const monto = parseFloat(gasto.monto) || 0;
+        
+        // Asegurar que sumamos los gastos del mes correcto
+        if (date.getMonth() === month && date.getFullYear() === year) {
+            dailyTotals[day - 1] += monto;
+            totalMonth += monto;
+            
+            // Si el gasto fue de este lunes en adelante...
+            if (date >= startOfWeek) {
+                totalWeek += monto;
+            }
+        }
+    });
+
+    const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
+
+    // 2. HTML: Gráfico + Lista
+    const html = `
+        <div class="bg-white p-5 rounded-2xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Ritmo de Gasto</h2>
+                    <p class="text-sm text-gray-500">Media: <span class="font-bold text-gray-800">${gastoMedio.toLocaleString('es-ES', formatOptions)}/día</span></p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Esta Semana</p>
+                    <p class="text-2xl font-black text-blue-600 leading-none">${totalWeek.toLocaleString('es-ES', formatOptions)}</p>
+                </div>
+            </div>
+            
+            <div class="h-40 w-full relative">
+                <canvas id="daily-expenses-chart"></canvas>
+            </div>
+        </div>
+        
+        <h2 class="text-lg font-bold text-gray-800 mb-3 px-1">Todos los Gastos</h2>
+        <div id="expenses-list" class="space-y-3 pb-8">
+            <div class="text-center text-gray-400 animate-pulse py-4">Cargando...</div>
+        </div>
+    `;
+
+    // Usamos el contenedor general
+    renderViewShell('Gastos', html);
+
+    // 3. Dibujar el Gráfico con Chart.js
+    const ctx = document.getElementById('daily-expenses-chart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({length: daysInMonth}, (_, i) => i + 1), // Días del 1 al 31
+                datasets: [{
+                    data: dailyTotals,
+                    // Destacar el día de HOY en naranja, el resto en azul suave
+                    backgroundColor: dailyTotals.map((_, i) => (i + 1) === currentDay ? '#f97316' : '#93c5fd'),
+                    borderRadius: 4,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        displayColors: false,
+                        callbacks: {
+                            title: (context) => `Día ${context[0].label}`,
+                            label: (context) => context.parsed.y.toLocaleString('es-ES', formatOptions)
+                        }
+                    }
+                },
+                scales: {
+                    x: { 
+                        grid: { display: false },
+                        ticks: { 
+                            maxTicksLimit: 15, 
+                            font: { size: 10 },
+                            color: '#9ca3af'
+                        },
+                        border: { display: false }
+                    },
+                    y: { 
+                        beginAtZero: true, 
+                        border: { display: false },
+                        grid: { color: '#f3f4f6' },
+                        ticks: { 
+                            maxTicksLimit: 5, 
+                            font: { size: 10 },
+                            color: '#9ca3af',
+                            callback: (val) => val + '€'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 4. Renderizar la Lista de Gastos
     const listContainer = $('#expenses-list');
     if (state.monthlyExpenses.length > 0) {
         listContainer.innerHTML = state.monthlyExpenses.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
-            <div class="bg-white p-3 rounded-lg shadow flex items-center justify-between">
-                <div>
-                    <p class="font-semibold">${gasto.detalle}</p>
-                    <p class="text-sm text-gray-500">${gasto.categoria || 'Sin Categoría'} - ${new Date(gasto.fecha).toLocaleDateString('es-ES')}</p>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
+                        ${CATEGORY_EMOJIS[gasto.categoria] || '💰'}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
+                        <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria || 'Sin Categoría'} • ${new Date(gasto.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</p>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="font-bold text-gray-800">${(gasto.monto || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</span>
-                    <button class="edit-btn p-2 text-gray-400 hover:text-blue-600" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
-                    <button class="delete-btn p-2 text-gray-400 hover:text-red-600" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
+                <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
+                    <span class="font-black text-gray-900">${(parseFloat(gasto.monto) || 0).toLocaleString('es-ES', formatOptions)}</span>
+                    <div class="flex items-center space-x-2">
+                        <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
+                        <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
+                    </div>
                 </div>
             </div>`).join('');
+        
         $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
         $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
-    } else {
-        listContainer.innerHTML = `<p class="text-center text-gray-500">No hay gastos este mes.</p>`;
+    } else { 
+        listContainer.innerHTML = `
+            <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                <div class="text-4xl mb-3 opacity-50">🍃</div>
+                <p class="text-gray-500 font-medium">Aún no hay gastos este mes.</p>
+                <p class="text-xs text-gray-400 mt-1">Tus compras aparecerán aquí.</p>
+            </div>`; 
     }
 }
 
