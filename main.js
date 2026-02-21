@@ -674,26 +674,32 @@ async function renderGastosView() {
 }
 
 // 3. INFORMES
+// main.js - REEMPLAZA ESTAS 3 FUNCIONES COMPLETAS
+
 async function renderInformesView() {
     renderViewShell('Informes', `
-        <div class="bg-white p-4 rounded-lg shadow mb-8">
-            <h2 class="text-lg font-semibold text-gray-500 mb-3">Evolución de Gastos</h2>
-            <div id="informes-filters" class="flex flex-wrap gap-2 mb-4"></div>
-            <div class="h-80 mt-4"><canvas id="history-chart"></canvas></div>
+        <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-8 animate-fade-in">
+            <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Evolución Histórica</h2>
+            
+            <div id="informes-filters" class="flex overflow-x-auto pb-2 gap-2" style="scrollbar-width: none; -ms-overflow-style: none;"></div>
+            <style>#informes-filters::-webkit-scrollbar { display: none; }</style> <div class="h-64 mt-4 relative">
+                <canvas id="history-chart"></canvas>
+            </div>
         </div>
+        
         <div id="mortgage-integration-container" class="mb-8">
-            <div class="bg-white p-4 rounded-lg shadow min-h-[200px] flex items-center justify-center">
+            <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 min-h-[150px] flex items-center justify-center">
                  <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
             </div>
         </div>
-        <div class="bg-white p-4 rounded-lg shadow">
-            <h2 class="text-lg font-semibold text-gray-500 mb-3">Análisis Mensual Inteligente</h2>
+        
+        <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Análisis Mensual</h2>
             <div class="mb-4">
-                <label for="month-selector" class="block text-sm font-medium text-gray-700">Seleccionar Mes:</label>
-                <select id="month-selector" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
+                <select id="month-selector" class="mt-1 block w-full rounded-xl border-gray-200 bg-gray-50 text-gray-700 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 p-3 font-medium cursor-pointer"></select>
             </div>
             <div id="monthly-analysis-content" class="mt-4">
-                <p class="text-center text-gray-400 py-8">Selecciona un mes para ver el análisis.</p>
+                <p class="text-center text-gray-400 py-8">Selecciona un mes para ver la magia.</p>
             </div>
         </div>
     `);
@@ -717,6 +723,136 @@ async function renderInformesView() {
     populateMonthSelector();
     loadMortgageComponent(); 
     $('#month-selector').addEventListener('change', handleMonthSelection);
+}
+
+function populateInformesFilters() {
+    const filtersContainer = $('#informes-filters');
+    if (!filtersContainer) return;
+    const uniqueCategories = [...new Set((state.history || []).map(item => item.categoria))].filter(Boolean);
+    const allCategories = ['Total', ...uniqueCategories.filter(cat => cat.toLowerCase() !== 'total')];
+
+    // Estilos modernos para los "chips" (píldoras)
+    const baseClass = "filter-chip flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 border cursor-pointer select-none";
+    const inactiveClass = "bg-white text-gray-500 border-gray-200 hover:bg-gray-50";
+    const activeClass = "is-active bg-gray-800 text-white border-gray-800 shadow-md transform scale-105";
+
+    filtersContainer.innerHTML = allCategories.map(cat => 
+        `<div class="${baseClass} ${inactiveClass}" data-category="${cat}">${cat}</div>`
+    ).join('');
+
+    filtersContainer.addEventListener('click', e => {
+        const chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        
+        if (typeof triggerHaptic === 'function') triggerHaptic('light');
+
+        // Toggle visual classes
+        const isActive = chip.classList.contains('is-active');
+        if (isActive) {
+            chip.className = `${baseClass} ${inactiveClass}`;
+        } else {
+            chip.className = `${baseClass} ${activeClass}`;
+        }
+        
+        const selectedCategories = [...$$('.filter-chip.is-active')].map(c => c.dataset.category);
+        if (selectedCategories.length === 0) {
+            updateHistoryChart(['Total']);
+            const totalChip = filtersContainer.querySelector('[data-category="Total"]');
+            if(totalChip) totalChip.className = `${baseClass} ${activeClass}`;
+        } else {
+            updateHistoryChart(selectedCategories);
+        }
+    });
+    
+    // Activar 'Total' por defecto
+    const totalChip = filtersContainer.querySelector('[data-category="Total"]');
+    if(totalChip) totalChip.className = `${baseClass} ${activeClass}`;
+}
+
+function updateHistoryChart(selectedCategories) {
+    if (state.activeChart) state.activeChart.destroy();
+    const chartCanvas = document.getElementById('history-chart');
+    if (!chartCanvas) return;
+
+    const historyData = (state.history || [])
+        .map(d => ({ ...d, ano: parseInt(d.ano, 10), gasto: parseFloat(d.gasto), monthNumber: getMonthNumberFromName(d.mes) }))
+        .filter(d => d.mes && !isNaN(d.ano) && d.ano > 0 && !isNaN(d.gasto) && d.monthNumber > -1)
+        .sort((a,b) => (a.ano * 100 + a.monthNumber) - (b.ano * 100 + b.monthNumber));
+
+    const labels = [...new Set(historyData.map(d => `${d.mes.substring(0,3)} ${d.ano}`))];
+    const ctx = chartCanvas.getContext('2d');
+
+    // Crear un degradado azul elegante para el fondo (Estilo Fintech)
+    let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)'); // Azul suave transparente arriba
+    gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');   // Transparente total abajo
+
+    const datasets = selectedCategories.map((cat, index) => {
+        const data = labels.map(label => {
+            const [mesAbbr, anoStr] = label.split(' ');
+            const entry = historyData.find(d => d.mes.substring(0, 3).toLowerCase() === mesAbbr.toLowerCase() && d.ano === parseInt(anoStr, 10) && normalizeString(d.categoria) === normalizeString(cat));
+            return entry ? entry.gasto : 0;
+        });
+        
+        const isTotal = cat.toLowerCase() === 'total';
+        const colors = ['#2563eb', '#dc2626', '#16a34a', '#f59e0b', '#7c3aed', '#ec4899'];
+        const lineColor = isTotal ? '#2563eb' : colors[index % colors.length];
+
+        return { 
+            label: cat, 
+            data, 
+            borderColor: lineColor, 
+            backgroundColor: isTotal ? gradient : 'transparent', // Solo rellenar si es Total para no ensuciar
+            fill: isTotal, 
+            tension: 0.4, // Curva suave
+            borderWidth: 3, // Línea más gordita
+            pointRadius: 0, // Ocultar puntos feos por defecto
+            pointHoverRadius: 6, // Mostrar punto grande al pasar el dedo
+            pointBackgroundColor: '#ffffff',
+            pointBorderColor: lineColor,
+            pointBorderWidth: 2
+        };
+    });
+
+    state.activeChart = new Chart(ctx, { 
+        type: 'line', 
+        data: { labels, datasets }, 
+        options: {
+            responsive: true, 
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: { 
+                legend: { display: false }, // Ocultamos la leyenda porque ya tenemos las píldoras arriba
+                tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.9)', // Tooltip oscuro premium
+                    titleFont: { size: 13, family: "'Inter', sans-serif" },
+                    bodyFont: { size: 14, weight: 'bold', family: "'Inter', sans-serif" },
+                    padding: 12,
+                    cornerRadius: 8,
+                    displayColors: true,
+                    callbacks: {
+                        label: function(context) {
+                            return ` ${context.dataset.label}: ${context.parsed.y.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}`;
+                        }
+                    }
+                }
+            },
+            scales: { 
+                y: { 
+                    beginAtZero: true,
+                    grid: { color: '#f3f4f6', drawBorder: false }, // Líneas horizontales muy suaves
+                    ticks: { color: '#9ca3af', font: { size: 11 }, maxTicksLimit: 6 }
+                }, 
+                x: { 
+                    grid: { display: false, drawBorder: false }, // Sin líneas verticales
+                    ticks: { color: '#9ca3af', font: { size: 11 }, maxRotation: 0, autoSkipPadding: 15 }
+                } 
+            }
+        } 
+    });
 }
 
 // 4. INVERTIR
