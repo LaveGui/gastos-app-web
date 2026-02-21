@@ -310,6 +310,8 @@ function renderViewShell(title, content) {
 
 // main.js - Reemplaza renderDashboardView COMPLETA
 
+// main.js - Reemplaza renderDashboardView COMPLETA
+
 function renderDashboardView() {
     // 1. Datos iniciales
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
@@ -346,7 +348,7 @@ function renderDashboardView() {
             </div>`;
     }
 
-    // --- TEXTO DE GEMINI POR DEFECTO ---
+    // --- TEXTO DE GEMINI ---
     const geminiText = state.aiAdvice || "Calculando tus finanzas...";
 
     // 3. Render HTML
@@ -369,8 +371,8 @@ function renderDashboardView() {
             <p class="mt-2 font-semibold ${getBudgetColor(totalPercent)}">${totalPercent.toFixed(1)}% del presupuesto total</p>
         </div>
 
-        <div class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[2px] rounded-3xl shadow-md mb-6 animate-fade-in transform transition hover:scale-[1.01]">
-            <div class="bg-white rounded-[22px] p-5 h-full">
+        <div class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[2px] rounded-3xl shadow-sm mb-6 animate-fade-in transform transition hover:scale-[1.01]">
+            <div class="bg-white rounded-[22px] p-5">
                 <div class="flex items-center gap-3 mb-2">
                     <div class="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-lg shadow-sm">
                         ✨
@@ -378,11 +380,10 @@ function renderDashboardView() {
                     <h3 class="font-bold text-gray-800 text-sm tracking-wide">Gemini Insights</h3>
                 </div>
                 <p class="text-sm text-gray-600 font-medium italic leading-relaxed">
-                    "${geminiText}"
+                    ${geminiText}
                 </p>
             </div>
         </div>
-
         <div id="distribution-area" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="budget-list" class="space-y-3"></div>
             <div id="distribution-chart-card" class="bg-white rounded-lg shadow p-4">
@@ -394,7 +395,7 @@ function renderDashboardView() {
 
     renderViewShell('Dashboard', dashboardHTML);
 
-    // --- 4. LISTENERS CORREGIDOS ---
+    // --- 4. LISTENERS ---
 
     const quickMortgageBtn = document.getElementById('quick-add-mortgage');
     if (quickMortgageBtn) {
