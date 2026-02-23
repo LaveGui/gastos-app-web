@@ -512,18 +512,17 @@ function updateBudgetList(categories) {
 let showFixedExpenses = false;
 let currentGastosSearchTerm = ''; // <-- AÑADE ESTA LÍNEA
 
+
 // main.js - Reemplaza renderGastosView COMPLETA
 
 async function renderGastosView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
 
-    // 1. Filtrado de Fijos
     const FIXED_CATEGORIES = ['Hipoteca', 'Gym', 'WiFi', 'Luz', 'Gas', 'Comunidad'];
     const expensesToProcess = showFixedExpenses 
         ? state.monthlyExpenses 
         : state.monthlyExpenses.filter(gasto => !FIXED_CATEGORIES.includes(gasto.categoria));
 
-    // 2. Cálculos Matemáticos
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -554,7 +553,6 @@ async function renderGastosView() {
 
     const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
 
-    // 3. Gamificación (Días Cero)
     let diasCeroCount = 0;
     let rachaActual = 0;
     for (let i = 0; i < currentDay; i++) {
@@ -566,7 +564,6 @@ async function renderGastosView() {
         }
     }
 
-    // 4. HTML Base
     const html = `
         <div class="bg-white p-5 rounded-3xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
             <div class="flex justify-between items-start mb-4">
@@ -612,7 +609,6 @@ async function renderGastosView() {
 
     let isDeepSearchActive = false;
 
-    // 5. Motor de Renderizado (Blindado con try-catch y conversión de Strings)
     const renderList = (searchTerm = '', deepData = null) => {
         try {
             const term = searchTerm.toLowerCase().trim();
@@ -623,19 +619,17 @@ async function renderGastosView() {
             if (deepData) titulo.innerText = `Resultados Históricos (${deepData.length})`;
             else titulo.innerText = `Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}`;
 
-            // BLINDAJE 1: Convertimos TODO a texto (String) explícitamente para evitar crashes
+            // Ahora los datos vienen limpios de la nueva función de la API
             const normalizedData = sourceData.map((g, index) => {
-                const montoCrudo = g.monto || g.Monto || g.gasto || g.presupuesto || 0;
                 return {
-                    id: g.id || g.Id || g.ID || index,
-                    fecha: g.fecha || g.Fecha || g.ano || new Date().toISOString(), 
-                    categoria: String(g.categoria || g.Categoría || g.Categoria || 'Sin Categoría'),
-                    detalle: String(g.detalle || g.Detalle || g.mes || ''), 
-                    monto: parseFloat(montoCrudo) || 0
+                    id: g.id || index,
+                    fecha: g.fecha || new Date().toISOString(), 
+                    categoria: String(g.categoria || 'Sin Categoría'),
+                    detalle: String(g.detalle || ''), 
+                    monto: parseFloat(g.monto) || 0
                 };
             });
 
-            // BLINDAJE 2: Búsqueda segura
             const filtered = normalizedData.filter(g => {
                 if (!term) return deepData ? false : true; 
                 const matchDetalle = g.detalle.toLowerCase().includes(term);
@@ -647,9 +641,8 @@ async function renderGastosView() {
             let itemsHTML = '';
             if (filtered.length > 0) {
                 itemsHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => {
-                    // Protegemos el formateo de fecha por si alguna viene corrupta
                     let gDate = new Date(gasto.fecha);
-                    if (isNaN(gDate)) gDate = new Date(); // Fallback si la fecha es inválida
+                    if (isNaN(gDate)) gDate = new Date(); 
 
                     const dateOptions = gDate.getFullYear() !== year ? {day: '2-digit', month: 'short', year: 'numeric'} : {day: '2-digit', month: 'short'};
                     
@@ -675,7 +668,6 @@ async function renderGastosView() {
                     </div>`;
                 }).join('');
             } else {
-                // Textos mejorados si no hay resultados
                 itemsHTML = `
                     <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
                         <div class="text-4xl mb-3 opacity-50">🕵️‍♂️</div>
@@ -711,9 +703,10 @@ async function renderGastosView() {
 
                     showLoader('Descargando archivo histórico...');
                     try {
-                        const result = await apiService.call('getSheetData', { sheetName: 'Gastos' });
+                        // AQUÍ ESTÁ LA CLAVE: Llamamos a la nueva función
+                        const result = await apiService.call('getAllExpenses');
                         if (result.status === 'success') {
-                            state.allExpensesBackup = result.data.processedData || [];
+                            state.allExpensesBackup = result.data || [];
                             isDeepSearchActive = true;
                             renderList(currentGastosSearchTerm, state.allExpensesBackup);
                         } else {
@@ -733,7 +726,6 @@ async function renderGastosView() {
         }
     };
 
-    // 6. Listeners
     document.getElementById('toggle-fixed-btn').addEventListener('click', () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('light');
         showFixedExpenses = !showFixedExpenses;
@@ -754,7 +746,6 @@ async function renderGastosView() {
 
     renderList(currentGastosSearchTerm, isDeepSearchActive ? state.allExpensesBackup : null);
 
-    // 8. Plugin y Dibujo del Gráfico (Chart.js)
     const zeroSpendPlugin = {
         id: 'zeroSpendPlugin',
         afterDatasetsDraw(chart) {
