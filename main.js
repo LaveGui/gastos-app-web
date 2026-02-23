@@ -514,8 +514,6 @@ let currentGastosSearchTerm = ''; // <-- AÑADE ESTA LÍNEA
 
 // main.js - Reemplaza renderGastosView COMPLETA
 
-// main.js - Reemplaza renderGastosView COMPLETA
-
 async function renderGastosView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
 
@@ -604,28 +602,55 @@ async function renderGastosView() {
                 placeholder="Buscar comercio, categoría o cantidad...">
         </div>
 
-        <h2 class="text-lg font-bold text-gray-800 mb-3 px-1">Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}</h2>
+        <div class="flex justify-between items-center mb-3 px-1">
+            <h2 id="lista-titulo" class="text-lg font-bold text-gray-800">Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}</h2>
+        </div>
         <div id="expenses-list" class="space-y-3 pb-8"></div>
     `;
 
     renderViewShell('Gastos', html);
 
-    // 5. Motor de Renderizado de la Lista (Se ejecuta al escribir)
-    const renderList = (searchTerm = '') => {
+    // Variable para controlar si estamos en modo "Búsqueda Profunda"
+    let isDeepSearchActive = false;
+
+    // 5. Motor de Renderizado de la Lista
+    const renderList = (searchTerm = '', deepData = null) => {
         const term = searchTerm.toLowerCase().trim();
         const listContainer = $('#expenses-list');
+        const titulo = $('#lista-titulo');
         
-        // Filtramos buscando coincidencias en Detalle, Categoría o Monto
-        const filtered = expensesToProcess.filter(g => {
-            if (!term) return true;
-            const matchDetalle = (g.detalle || '').toLowerCase().includes(term);
-            const matchCategoria = (g.categoria || '').toLowerCase().includes(term);
-            const matchMonto = (g.monto || '').toString().includes(term);
+        // Determinar qué datos usar (mes actual o historial completo)
+        let sourceData = deepData || expensesToProcess;
+        if (deepData) titulo.innerText = `Resultados Históricos (${deepData.length})`;
+        else titulo.innerText = `Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}`;
+
+        // Normalizar los datos (el historial crudo de Sheets puede tener mayúsculas en las keys)
+        const normalizedData = sourceData.map(g => ({
+            id: g.id || g.Id || g.ID,
+            fecha: g.fecha || g.Fecha,
+            categoria: g.categoria || g.Categoría || g.Categoria || 'Sin Categoría',
+            detalle: g.detalle || g.Detalle || '',
+            monto: g.monto || g.Monto || 0
+        }));
+
+        // Filtrado
+        const filtered = normalizedData.filter(g => {
+            if (!term) return deepData ? false : true; // Si es deep search sin término, no mostrar todo
+            const matchDetalle = g.detalle.toLowerCase().includes(term);
+            const matchCategoria = g.categoria.toLowerCase().includes(term);
+            const matchMonto = g.monto.toString().includes(term);
             return matchDetalle || matchCategoria || matchMonto;
         });
 
+        // Generar HTML de los resultados
+        let itemsHTML = '';
         if (filtered.length > 0) {
-            listContainer.innerHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
+            itemsHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => {
+                // Formato de fecha (Si es antiguo, mostramos el año)
+                const gDate = new Date(gasto.fecha);
+                const dateOptions = gDate.getFullYear() !== year ? {day: '2-digit', month: 'short', year: 'numeric'} : {day: '2-digit', month: 'short'};
+                
+                return `
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
                     <div class="flex items-center gap-3 overflow-hidden">
                         <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
@@ -633,27 +658,74 @@ async function renderGastosView() {
                         </div>
                         <div class="min-w-0">
                             <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
-                            <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria || 'Sin Categoría'} • ${new Date(gasto.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</p>
+                            <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria} • ${gDate.toLocaleDateString('es-ES', dateOptions)}</p>
                         </div>
                     </div>
                     <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
                         <span class="font-black text-gray-900">${(parseFloat(gasto.monto) || 0).toLocaleString('es-ES', formatOptions)}</span>
+                        ${!deepData ? `
                         <div class="flex items-center space-x-2">
                             <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
                             <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
-                        </div>
-                    </div>
-                </div>`).join('');
-            
-            $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
-            $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
-        } else { 
-            listContainer.innerHTML = `
+                        </div>` : ''} </div>
+                </div>`;
+            }).join('');
+        } else {
+            itemsHTML = `
                 <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
                     <div class="text-4xl mb-3 opacity-50">🕵️‍♂️</div>
-                    <p class="text-gray-500 font-medium">Sin resultados</p>
-                    <p class="text-xs text-gray-400 mt-1">No se encontró "${searchTerm}"</p>
-                </div>`; 
+                    <p class="text-gray-500 font-medium">Sin resultados locales</p>
+                    <p class="text-xs text-gray-400 mt-1">No se encontró "${searchTerm}" en este mes.</p>
+                </div>`;
+        }
+
+        // Añadir el botón de Búsqueda Profunda si hay un término escrito y no estamos ya en búsqueda profunda
+        if (term && !deepData) {
+            itemsHTML += `
+                <button id="deep-search-btn" class="w-full mt-4 py-3 bg-indigo-50 text-indigo-700 font-bold rounded-xl text-sm hover:bg-indigo-100 transition-colors border border-indigo-100 flex items-center justify-center gap-2">
+                    <span>📚</span> Buscar "${term}" en todos los meses anteriores
+                </button>
+            `;
+        }
+
+        listContainer.innerHTML = itemsHTML;
+        
+        // Re-adjuntar listeners locales
+        if (!deepData) {
+            $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+            $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+        }
+
+        // Listener del botón de búsqueda profunda
+        const deepBtn = document.getElementById('deep-search-btn');
+        if (deepBtn) {
+            deepBtn.addEventListener('click', async () => {
+                triggerHaptic('medium');
+                
+                // Si ya tenemos la base de datos descargada en caché, la usamos al instante
+                if (state.allExpensesBackup) {
+                    isDeepSearchActive = true;
+                    renderList(currentGastosSearchTerm, state.allExpensesBackup);
+                    return;
+                }
+
+                // Si no, la pedimos a Google Sheets
+                showLoader('Descargando archivo histórico...');
+                try {
+                    const result = await apiService.call('getSheetData', { sheetName: 'Gastos' });
+                    if (result.status === 'success') {
+                        state.allExpensesBackup = result.data.processedData || [];
+                        isDeepSearchActive = true;
+                        renderList(currentGastosSearchTerm, state.allExpensesBackup);
+                    } else {
+                        throw new Error('No se pudo cargar el historial');
+                    }
+                } catch (error) {
+                    showToast('Error al buscar en meses anteriores', 'error');
+                } finally {
+                    hideLoader();
+                }
+            });
         }
     };
 
@@ -668,12 +740,16 @@ async function renderGastosView() {
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
             currentGastosSearchTerm = e.target.value;
-            renderList(currentGastosSearchTerm);
+            // Si el usuario borra el input, salimos de la búsqueda profunda
+            if (currentGastosSearchTerm === '') isDeepSearchActive = false;
+            
+            // Renderizamos (usando caché histórico si estamos en deep search, o local si no)
+            renderList(currentGastosSearchTerm, isDeepSearchActive ? state.allExpensesBackup : null);
         });
     }
 
     // 7. Render Inicial de la Lista
-    renderList(currentGastosSearchTerm);
+    renderList(currentGastosSearchTerm, isDeepSearchActive ? state.allExpensesBackup : null);
 
     // 8. Plugin y Dibujo del Gráfico (Chart.js)
     const zeroSpendPlugin = {
