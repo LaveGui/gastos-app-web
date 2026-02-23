@@ -510,13 +510,16 @@ function updateBudgetList(categories) {
 
 // main.js - Variable de estado para los gastos fijos (Añadir justo encima de la función)
 let showFixedExpenses = false;
+let currentGastosSearchTerm = ''; // <-- AÑADE ESTA LÍNEA
+
+// main.js - Reemplaza renderGastosView COMPLETA
 
 // main.js - Reemplaza renderGastosView COMPLETA
 
 async function renderGastosView() {
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 };
 
-    // 1. Lógica de Filtrado Inteligente (Fijos)
+    // 1. Filtrado de Fijos
     const FIXED_CATEGORIES = ['Hipoteca', 'Gym', 'WiFi', 'Luz', 'Gas', 'Comunidad'];
     const expensesToProcess = showFixedExpenses 
         ? state.monthlyExpenses 
@@ -553,22 +556,19 @@ async function renderGastosView() {
 
     const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
 
-    // --- 🎮 NUEVO: LÓGICA DE GAMIFICACIÓN (DÍAS CERO) ---
+    // 3. Lógica de Gamificación (Días Cero)
     let diasCeroCount = 0;
     let rachaActual = 0;
-    
-    // Solo evaluamos desde el día 1 hasta el día de HOY
     for (let i = 0; i < currentDay; i++) {
         if (dailyTotals[i] === 0) {
             diasCeroCount++;
             rachaActual++;
         } else {
-            rachaActual = 0; // Se rompe la racha si gastas
+            rachaActual = 0; 
         }
     }
-    // ----------------------------------------------------
 
-    // 3. HTML: Gráfico + Lista + Botón Toggle + Badges
+    // 4. HTML Base
     const html = `
         <div class="bg-white p-5 rounded-3xl shadow-sm mb-6 border border-gray-100 animate-fade-in">
             <div class="flex justify-between items-start mb-4">
@@ -590,53 +590,109 @@ async function renderGastosView() {
                     </div>
                 </div>
             </div>
-            
             <div class="h-40 w-full relative">
                 <canvas id="daily-expenses-chart"></canvas>
             </div>
         </div>
         
+        <div class="relative mb-5 px-1 animate-fade-in">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <span class="text-gray-400 text-lg">🔍</span>
+            </div>
+            <input type="text" id="gastos-search-input" value="${currentGastosSearchTerm}" 
+                class="block w-full pl-12 pr-4 py-3.5 border border-gray-100 rounded-2xl leading-5 bg-white shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm font-medium" 
+                placeholder="Buscar comercio, categoría o cantidad...">
+        </div>
+
         <h2 class="text-lg font-bold text-gray-800 mb-3 px-1">Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}</h2>
         <div id="expenses-list" class="space-y-3 pb-8"></div>
     `;
 
     renderViewShell('Gastos', html);
 
-    // 4. Listeners del toggle
+    // 5. Motor de Renderizado de la Lista (Se ejecuta al escribir)
+    const renderList = (searchTerm = '') => {
+        const term = searchTerm.toLowerCase().trim();
+        const listContainer = $('#expenses-list');
+        
+        // Filtramos buscando coincidencias en Detalle, Categoría o Monto
+        const filtered = expensesToProcess.filter(g => {
+            if (!term) return true;
+            const matchDetalle = (g.detalle || '').toLowerCase().includes(term);
+            const matchCategoria = (g.categoria || '').toLowerCase().includes(term);
+            const matchMonto = (g.monto || '').toString().includes(term);
+            return matchDetalle || matchCategoria || matchMonto;
+        });
+
+        if (filtered.length > 0) {
+            listContainer.innerHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
+                            ${CATEGORY_EMOJIS[gasto.categoria] || '💰'}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
+                            <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria || 'Sin Categoría'} • ${new Date(gasto.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
+                        <span class="font-black text-gray-900">${(parseFloat(gasto.monto) || 0).toLocaleString('es-ES', formatOptions)}</span>
+                        <div class="flex items-center space-x-2">
+                            <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
+                            <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
+                        </div>
+                    </div>
+                </div>`).join('');
+            
+            $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+            $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+        } else { 
+            listContainer.innerHTML = `
+                <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                    <div class="text-4xl mb-3 opacity-50">🕵️‍♂️</div>
+                    <p class="text-gray-500 font-medium">Sin resultados</p>
+                    <p class="text-xs text-gray-400 mt-1">No se encontró "${searchTerm}"</p>
+                </div>`; 
+        }
+    };
+
+    // 6. Listeners
     document.getElementById('toggle-fixed-btn').addEventListener('click', () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('light');
         showFixedExpenses = !showFixedExpenses;
         renderGastosView(); 
     });
 
-    // --- 🎮 NUEVO: PLUGIN PARA DIBUJAR ESTRELLAS EN CHART.JS ---
+    const searchInput = document.getElementById('gastos-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            currentGastosSearchTerm = e.target.value;
+            renderList(currentGastosSearchTerm);
+        });
+    }
+
+    // 7. Render Inicial de la Lista
+    renderList(currentGastosSearchTerm);
+
+    // 8. Plugin y Dibujo del Gráfico (Chart.js)
     const zeroSpendPlugin = {
         id: 'zeroSpendPlugin',
         afterDatasetsDraw(chart) {
             const { ctx, data, chartArea: { bottom } } = chart;
-            ctx.save();
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            
+            ctx.save(); ctx.font = '10px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             const dataset = data.datasets[0];
             const currentDayIndex = new Date().getDate() - 1;
-
             dataset.data.forEach((value, index) => {
-                // Dibujamos la estrella solo si el gasto es 0 y el día ya pasó (o es hoy)
                 if (value === 0 && index <= currentDayIndex) {
                     const meta = chart.getDatasetMeta(0);
-                    const xPos = meta.data[index].x;
-                    // Dibujar la estrellita justo encima de la base
-                    ctx.fillText('🌟', xPos, bottom - 2);
+                    ctx.fillText('🌟', meta.data[index].x, bottom - 2);
                 }
             });
             ctx.restore();
         }
     };
-    // -------------------------------------------------------------
 
-    // 5. Dibujar el Gráfico
     const ctx = document.getElementById('daily-expenses-chart');
     if (ctx) {
         new Chart(ctx, {
@@ -646,67 +702,25 @@ async function renderGastosView() {
                 datasets: [{
                     data: dailyTotals,
                     backgroundColor: dailyTotals.map((_, i) => (i + 1) === currentDay ? '#f97316' : '#93c5fd'),
-                    borderRadius: 4,
-                    borderSkipped: false
+                    borderRadius: 4, borderSkipped: false
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 plugins: { 
                     legend: { display: false },
-                    tooltip: {
-                        displayColors: false,
-                        callbacks: {
-                            title: (context) => `Día ${context[0].label}`,
-                            label: (context) => {
-                                const val = context.parsed.y;
-                                return val === 0 ? '🌟 ¡Día Cero!' : val.toLocaleString('es-ES', formatOptions);
-                            }
-                        }
-                    }
+                    tooltip: { displayColors: false, callbacks: {
+                        title: (context) => `Día ${context[0].label}`,
+                        label: (context) => context.parsed.y === 0 ? '🌟 ¡Día Cero!' : context.parsed.y.toLocaleString('es-ES', formatOptions)
+                    }}
                 },
                 scales: {
                     x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { size: 10 }, color: '#9ca3af' }, border: { display: false } },
                     y: { beginAtZero: true, border: { display: false }, grid: { color: '#f3f4f6' }, ticks: { maxTicksLimit: 5, font: { size: 10 }, color: '#9ca3af', callback: (val) => val + '€' } }
                 }
             },
-            plugins: [zeroSpendPlugin] // Activamos el plugin de las estrellas
+            plugins: [zeroSpendPlugin]
         });
-    }
-
-    // 6. Renderizar la Lista Filtrada
-    const listContainer = $('#expenses-list');
-    if (expensesToProcess.length > 0) {
-        listContainer.innerHTML = expensesToProcess.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => `
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
-                <div class="flex items-center gap-3 overflow-hidden">
-                    <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
-                        ${CATEGORY_EMOJIS[gasto.categoria] || '💰'}
-                    </div>
-                    <div class="min-w-0">
-                        <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
-                        <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria || 'Sin Categoría'} • ${new Date(gasto.fecha).toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</p>
-                    </div>
-                </div>
-                <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
-                    <span class="font-black text-gray-900">${(parseFloat(gasto.monto) || 0).toLocaleString('es-ES', formatOptions)}</span>
-                    <div class="flex items-center space-x-2">
-                        <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
-                        <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
-                    </div>
-                </div>
-            </div>`).join('');
-        
-        $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
-        $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
-    } else { 
-        listContainer.innerHTML = `
-            <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-                <div class="text-4xl mb-3 opacity-50">🍃</div>
-                <p class="text-gray-500 font-medium">Todo limpio.</p>
-                <p class="text-xs text-gray-400 mt-1">No hay gastos para mostrar con estos filtros.</p>
-            </div>`; 
     }
 }
 
