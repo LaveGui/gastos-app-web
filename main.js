@@ -554,7 +554,7 @@ async function renderGastosView() {
 
     const gastoMedio = totalMonth / (currentDay > 0 ? currentDay : 1);
 
-    // 3. Lógica de Gamificación (Días Cero)
+    // 3. Gamificación (Días Cero)
     let diasCeroCount = 0;
     let rachaActual = 0;
     for (let i = 0; i < currentDay; i++) {
@@ -612,113 +612,124 @@ async function renderGastosView() {
 
     let isDeepSearchActive = false;
 
-    // 5. Motor de Renderizado de la Lista
+    // 5. Motor de Renderizado (Blindado con try-catch y conversión de Strings)
     const renderList = (searchTerm = '', deepData = null) => {
-        const term = searchTerm.toLowerCase().trim();
-        const listContainer = $('#expenses-list');
-        const titulo = $('#lista-titulo');
-        
-        let sourceData = deepData || expensesToProcess;
-        if (deepData) titulo.innerText = `Resultados Históricos (${deepData.length})`;
-        else titulo.innerText = `Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}`;
+        try {
+            const term = searchTerm.toLowerCase().trim();
+            const listContainer = $('#expenses-list');
+            const titulo = $('#lista-titulo');
+            
+            let sourceData = deepData || expensesToProcess;
+            if (deepData) titulo.innerText = `Resultados Históricos (${deepData.length})`;
+            else titulo.innerText = `Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}`;
 
-        // MAGIA: Normalizamos los datos vengan como vengan desde la API
-        const normalizedData = sourceData.map((g, index) => {
-            const montoCrudo = g.monto || g.Monto || g.gasto || g.presupuesto || 0;
-            return {
-                id: g.id || g.Id || g.ID || index,
-                fecha: g.fecha || g.Fecha || g.ano, // Si falla la columna Fecha, lee 'ano'
-                categoria: g.categoria || g.Categoría || g.Categoria || 'Sin Categoría',
-                detalle: g.detalle || g.Detalle || g.mes || '', // Si falla la columna Detalle, lee 'mes'
-                monto: parseFloat(montoCrudo) || 0
-            };
-        });
+            // BLINDAJE 1: Convertimos TODO a texto (String) explícitamente para evitar crashes
+            const normalizedData = sourceData.map((g, index) => {
+                const montoCrudo = g.monto || g.Monto || g.gasto || g.presupuesto || 0;
+                return {
+                    id: g.id || g.Id || g.ID || index,
+                    fecha: g.fecha || g.Fecha || g.ano || new Date().toISOString(), 
+                    categoria: String(g.categoria || g.Categoría || g.Categoria || 'Sin Categoría'),
+                    detalle: String(g.detalle || g.Detalle || g.mes || ''), 
+                    monto: parseFloat(montoCrudo) || 0
+                };
+            });
 
-        const filtered = normalizedData.filter(g => {
-            if (!term) return deepData ? false : true; 
-            const matchDetalle = g.detalle.toLowerCase().includes(term);
-            const matchCategoria = g.categoria.toLowerCase().includes(term);
-            const matchMonto = g.monto.toString().includes(term);
-            return matchDetalle || matchCategoria || matchMonto;
-        });
+            // BLINDAJE 2: Búsqueda segura
+            const filtered = normalizedData.filter(g => {
+                if (!term) return deepData ? false : true; 
+                const matchDetalle = g.detalle.toLowerCase().includes(term);
+                const matchCategoria = g.categoria.toLowerCase().includes(term);
+                const matchMonto = g.monto.toString().includes(term);
+                return matchDetalle || matchCategoria || matchMonto;
+            });
 
-        let itemsHTML = '';
-        if (filtered.length > 0) {
-            itemsHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => {
-                const gDate = new Date(gasto.fecha);
-                const dateOptions = gDate.getFullYear() !== year ? {day: '2-digit', month: 'short', year: 'numeric'} : {day: '2-digit', month: 'short'};
-                
-                return `
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
-                    <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
-                            ${CATEGORY_EMOJIS[gasto.categoria] || '💰'}
+            let itemsHTML = '';
+            if (filtered.length > 0) {
+                itemsHTML = filtered.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(gasto => {
+                    // Protegemos el formateo de fecha por si alguna viene corrupta
+                    let gDate = new Date(gasto.fecha);
+                    if (isNaN(gDate)) gDate = new Date(); // Fallback si la fecha es inválida
+
+                    const dateOptions = gDate.getFullYear() !== year ? {day: '2-digit', month: 'short', year: 'numeric'} : {day: '2-digit', month: 'short'};
+                    
+                    return `
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition-all">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="w-12 h-12 flex-shrink-0 rounded-full bg-gray-50 flex items-center justify-center text-2xl border border-gray-100">
+                                ${CATEGORY_EMOJIS[gasto.categoria] || '💰'}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
+                                <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria} • ${gDate.toLocaleDateString('es-ES', dateOptions)}</p>
+                            </div>
                         </div>
-                        <div class="min-w-0">
-                            <p class="font-bold text-gray-800 text-sm truncate">${gasto.detalle}</p>
-                            <p class="text-xs text-gray-400 mt-0.5 truncate">${gasto.categoria} • ${gDate.toLocaleDateString('es-ES', dateOptions)}</p>
+                        <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
+                            <span class="font-black text-gray-900">${gasto.monto.toLocaleString('es-ES', formatOptions)}</span>
+                            ${!deepData ? `
+                            <div class="flex items-center space-x-2">
+                                <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
+                                <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
+                            </div>` : ''} 
                         </div>
-                    </div>
-                    <div class="flex flex-col items-end gap-2 flex-shrink-0 pl-2">
-                        <span class="font-black text-gray-900">${gasto.monto.toLocaleString('es-ES', formatOptions)}</span>
-                        ${!deepData ? `
-                        <div class="flex items-center space-x-2">
-                            <button class="edit-btn p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>✏️</button>
-                            <button class="delete-btn p-1.5 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors" data-gasto='${JSON.stringify(gasto)}'>🗑️</button>
-                        </div>` : ''} 
-                    </div>
-                </div>`;
-            }).join('');
-        } else {
-            itemsHTML = `
-                <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-                    <div class="text-4xl mb-3 opacity-50">🕵️‍♂️</div>
-                    <p class="text-gray-500 font-medium">Sin resultados locales</p>
-                    <p class="text-xs text-gray-400 mt-1">No se encontró "${searchTerm}" en este mes.</p>
-                </div>`;
-        }
+                    </div>`;
+                }).join('');
+            } else {
+                // Textos mejorados si no hay resultados
+                itemsHTML = `
+                    <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                        <div class="text-4xl mb-3 opacity-50">🕵️‍♂️</div>
+                        <p class="text-gray-500 font-medium">${deepData ? 'Sin resultados en todo el historial' : 'Sin resultados locales'}</p>
+                        <p class="text-xs text-gray-400 mt-1">No se encontró "${searchTerm}" ${deepData ? 'nunca.' : 'este mes.'}</p>
+                    </div>`;
+            }
 
-        if (term && !deepData) {
-            itemsHTML += `
-                <button id="deep-search-btn" class="w-full mt-4 py-3 bg-indigo-50 text-indigo-700 font-bold rounded-xl text-sm hover:bg-indigo-100 transition-colors border border-indigo-100 flex items-center justify-center gap-2">
-                    <span>📚</span> Buscar "${term}" en todos los meses anteriores
-                </button>
-            `;
-        }
+            if (term && !deepData) {
+                itemsHTML += `
+                    <button id="deep-search-btn" class="w-full mt-4 py-3 bg-indigo-50 text-indigo-700 font-bold rounded-xl text-sm hover:bg-indigo-100 transition-colors border border-indigo-100 flex items-center justify-center gap-2">
+                        <span>📚</span> Buscar "${term}" en todos los meses anteriores
+                    </button>
+                `;
+            }
 
-        listContainer.innerHTML = itemsHTML;
-        
-        if (!deepData) {
-            $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
-            $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
-        }
+            listContainer.innerHTML = itemsHTML;
+            
+            if (!deepData) {
+                $$('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+                $$('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+            }
 
-        const deepBtn = document.getElementById('deep-search-btn');
-        if (deepBtn) {
-            deepBtn.addEventListener('click', async () => {
-                triggerHaptic('medium');
-                if (state.allExpensesBackup) {
-                    isDeepSearchActive = true;
-                    renderList(currentGastosSearchTerm, state.allExpensesBackup);
-                    return;
-                }
-
-                showLoader('Descargando archivo histórico...');
-                try {
-                    const result = await apiService.call('getSheetData', { sheetName: 'Gastos' });
-                    if (result.status === 'success') {
-                        state.allExpensesBackup = result.data.processedData || [];
+            const deepBtn = document.getElementById('deep-search-btn');
+            if (deepBtn) {
+                deepBtn.addEventListener('click', async () => {
+                    triggerHaptic('medium');
+                    if (state.allExpensesBackup) {
                         isDeepSearchActive = true;
                         renderList(currentGastosSearchTerm, state.allExpensesBackup);
-                    } else {
-                        throw new Error('No se pudo cargar el historial');
+                        return;
                     }
-                } catch (error) {
-                    showToast('Error al buscar en meses anteriores', 'error');
-                } finally {
-                    hideLoader();
-                }
-            });
+
+                    showLoader('Descargando archivo histórico...');
+                    try {
+                        const result = await apiService.call('getSheetData', { sheetName: 'Gastos' });
+                        if (result.status === 'success') {
+                            state.allExpensesBackup = result.data.processedData || [];
+                            isDeepSearchActive = true;
+                            renderList(currentGastosSearchTerm, state.allExpensesBackup);
+                        } else {
+                            throw new Error('No se pudo cargar el historial');
+                        }
+                    } catch (error) {
+                        console.error("Error en deep search:", error);
+                        showToast('Error al buscar en meses anteriores', 'error');
+                    } finally {
+                        hideLoader();
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Crasheo evitado en renderList:", e);
+            $('#expenses-list').innerHTML = `<p class="text-center text-red-500 py-4">Error interno al buscar. Borra y vuelve a escribir.</p>`;
         }
     };
 
