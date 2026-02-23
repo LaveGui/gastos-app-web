@@ -797,14 +797,24 @@ async function renderGastosView() {
 // 3. INFORMES
 // main.js - REEMPLAZA ESTAS 3 FUNCIONES COMPLETAS
 
+// main.js - REEMPLAZA renderInformesView Y AÑADE renderFugasWidget
+
 async function renderInformesView() {
     renderViewShell('Informes', `
         <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 mb-8 animate-fade-in">
             <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Evolución Histórica</h2>
-            
             <div id="informes-filters" class="flex overflow-x-auto pb-2 gap-2" style="scrollbar-width: none; -ms-overflow-style: none;"></div>
-            <style>#informes-filters::-webkit-scrollbar { display: none; }</style> <div class="h-64 mt-4 relative">
+            <style>#informes-filters::-webkit-scrollbar { display: none; }</style> 
+            <div class="h-64 mt-4 relative">
                 <canvas id="history-chart"></canvas>
+            </div>
+        </div>
+        
+        <div id="fugas-container" class="mb-8 animate-fade-in">
+            <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-center min-h-[100px]">
+                <div class="animate-pulse flex items-center gap-2 text-gray-400 font-medium">
+                    <span class="text-xl">🕵️‍♂️</span> Analizando facturas y recibos...
+                </div>
             </div>
         </div>
         
@@ -844,6 +854,125 @@ async function renderInformesView() {
     populateMonthSelector();
     loadMortgageComponent(); 
     $('#month-selector').addEventListener('change', handleMonthSelection);
+    
+    // Ejecutamos el motor del Radar de Fugas
+    renderFugasWidget();
+}
+
+// NUEVA FUNCIÓN: Motor del Radar de Fugas
+function renderFugasWidget() {
+    const container = document.getElementById('fugas-container');
+    if (!container || !state.history || !state.categories) return;
+
+    const formatCurrency = (amount) => (amount || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    const FIXED_CATEGORIES = ['Gym', 'WiFi', 'Luz', 'Gas', 'Comunidad', 'Agua']; // Excluimos Hipoteca porque ya tiene su propio widget
+    
+    // Determinar mes anterior
+    const now = new Date();
+    let prevMonth = now.getMonth(); // 0-11
+    let prevYear = now.getFullYear();
+    if (prevMonth === 0) { prevMonth = 12; prevYear--; }
+
+    const monthsNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const prevMonthName = monthsNames[prevMonth - 1];
+
+    let fugasHTML = '';
+    let hasAlerts = false;
+    let totalSavings = 0;
+    let totalLeaks = 0;
+
+    const insightsList = FIXED_CATEGORIES.map(cat => {
+        // Gasto mes actual (de state.categories que viene del Dashboard)
+        const currentData = state.categories.find(c => c.detalle.toLowerCase() === cat.toLowerCase());
+        const currentAmount = currentData ? (currentData.llevagastadoenelmes || 0) : 0;
+
+        // Gasto mes anterior (de state.history)
+        const pastData = state.history.find(h => 
+            h.categoria.toLowerCase() === cat.toLowerCase() && 
+            h.mes.toLowerCase() === prevMonthName.toLowerCase() && 
+            parseInt(h.ano) === prevYear
+        );
+        const pastAmount = pastData ? (parseFloat(pastData.gasto) || 0) : 0;
+
+        // Si no hay datos ni actuales ni pasados, saltamos
+        if (currentAmount === 0 && pastAmount === 0) return null;
+
+        const diff = currentAmount - pastAmount;
+        let statusObj = { text: 'Estable', color: 'text-gray-400', bg: 'bg-gray-50', icon: '✅' };
+
+        // Solo evaluamos si ya se ha pagado este mes (currentAmount > 0)
+        if (currentAmount > 0 && pastAmount > 0) {
+            if (diff > 1) { // Margen de 1€ de tolerancia
+                statusObj = { text: `+${formatCurrency(diff)}`, color: 'text-red-600', bg: 'bg-red-50', icon: '🚨' };
+                hasAlerts = true;
+                totalLeaks += diff;
+            } else if (diff < -1) {
+                statusObj = { text: `${formatCurrency(diff)}`, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: '📉' };
+                totalSavings += Math.abs(diff);
+            }
+        } else if (currentAmount === 0 && pastAmount > 0 && now.getDate() > 25) {
+            // Si estamos a fin de mes y no lo has pagado, puede que hayas cancelado la suscripción
+            statusObj = { text: 'No cobrado', color: 'text-blue-500', bg: 'bg-blue-50', icon: '⏳' };
+        } else if (currentAmount === 0) {
+            return null; // Aún no llega el recibo este mes
+        }
+
+        return `
+            <div class="flex items-center justify-between p-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center text-sm shadow-sm">
+                        ${CATEGORY_EMOJIS[cat] || '📋'}
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-gray-800">${cat}</p>
+                        <p class="text-[10px] text-gray-400 uppercase tracking-wider">${prevMonthName}: ${formatCurrency(pastAmount)}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-black text-gray-800">${formatCurrency(currentAmount)}</span>
+                    <span class="${statusObj.bg} ${statusObj.color} text-[10px] font-bold px-2 py-1 rounded-md border border-white/50 shadow-sm flex items-center gap-1 w-16 justify-center">
+                        ${statusObj.text}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).filter(Boolean); // Filtramos los nulos
+
+    if (insightsList.length === 0) {
+        fugasHTML = `
+            <div class="text-center py-6">
+                <p class="text-3xl mb-2">😴</p>
+                <p class="text-sm font-bold text-gray-700">Aún no hay recibos</p>
+                <p class="text-xs text-gray-400 mt-1">Se compararán cuando lleguen las facturas de este mes.</p>
+            </div>
+        `;
+    } else {
+        // Cabecera dinámica
+        let headerColor = hasAlerts ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-slate-800 to-slate-700';
+        let headerTitle = hasAlerts ? '¡Se detectaron subidas!' : 'Tus fijos están bajo control';
+        
+        fugasHTML = `
+            <div class="overflow-hidden rounded-2xl border border-gray-100 shadow-sm">
+                <div class="${headerColor} p-4 text-white flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-sm tracking-wide flex items-center gap-2">
+                            ${hasAlerts ? '🚨' : '🛡️'} Radar de Fijos
+                        </h3>
+                        <p class="text-xs text-white/80 mt-0.5">${headerTitle}</p>
+                    </div>
+                    ${hasAlerts 
+                        ? `<div class="bg-white text-red-600 text-[10px] font-black px-2 py-1 rounded-md shadow-sm">+${formatCurrency(totalLeaks)} extra</div>` 
+                        : `<div class="bg-white/20 text-white text-[10px] font-black px-2 py-1 rounded-md backdrop-blur-sm">Todo OK</div>`
+                    }
+                </div>
+                <div class="bg-white px-2 py-1">
+                    ${insightsList.join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = fugasHTML;
 }
 
 function populateInformesFilters() {
