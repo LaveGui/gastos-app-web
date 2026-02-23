@@ -24,6 +24,8 @@ const CATEGORY_EMOJIS = {
     "Viajes": "✈️" 
 };
 
+
+
 let state = { categories: [], huchas: [], history: [], monthlyExpenses: [], selectedCategory: null, activeChart: null, currentView: 'dashboard' };
 window.investmentFunds = null; // Caché para los fondos
 
