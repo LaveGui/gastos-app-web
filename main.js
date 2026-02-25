@@ -21,7 +21,9 @@ const CATEGORY_EMOJIS = {
     "Combustible": "⛽️", 
     "Ropa": "👕", 
     "Transporte": "🚌", 
-    "Viajes": "✈️" 
+    "Viajes": "✈️" ,
+    "Farmacia": "💊",  // <-- NUEVO
+    "Hogar": "🛋️"     // <-- NUEVO
 };
 
 
@@ -513,6 +515,7 @@ function updateBudgetList(categories) {
 // main.js - Variable de estado para los gastos fijos (Añadir justo encima de la función)
 let showFixedExpenses = false;
 let currentGastosSearchTerm = ''; // <-- AÑADE ESTA LÍNEA
+let isVacationMode = false;
 
 
 // main.js - Reemplaza renderGastosView COMPLETA
@@ -1903,7 +1906,12 @@ function openModal(category = null, defaultDate = null) {
                 <div class="bg-white w-full sm:max-w-md sm:rounded-lg rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 border-b border-gray-100">
                         <button id="modal-back-btn" class="text-gray-400 hover:text-gray-800 p-2 hidden">⬅️ Atrás</button>
-                        <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
+                        
+                        <div class="flex items-center gap-2">
+                            <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
+                            <button id="vacation-toggle-btn" class="p-1.5 rounded-full transition-colors flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100" title="Modo Vacaciones">✈️</button>
+                        </div>
+
                         <button id="modal-close-x" class="text-gray-400 hover:text-gray-800 p-2 text-xl font-bold">&times;</button>
                     </div>
                     <div id="modal-content" class="p-4 overflow-y-auto"></div>
@@ -1916,16 +1924,50 @@ function openModal(category = null, defaultDate = null) {
         $('#modal-close-x').addEventListener('click', closeModal);
         $('#modal-back-btn').addEventListener('click', () => {
             triggerHaptic('light');
-            if (modalState.step === 2) renderStep1();
+            if (modalState.step === 2 && !isVacationMode) renderStep1();
+        });
+
+        // 🌴 Listener del botón de Vacaciones
+        $('#vacation-toggle-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            triggerHaptic('medium');
+            isVacationMode = !isVacationMode; // Cambiamos el estado
+            
+            const btn = $('#vacation-toggle-btn');
+            if (isVacationMode) {
+                // Modo ON: Azul y saltamos directo a la pantalla de importe
+                btn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-blue-100 text-blue-600 scale-110 shadow-sm border border-blue-200';
+                modalState.category = 'Viajes';
+                renderStep2(); 
+            } else {
+                // Modo OFF: Gris y volvemos a mostrar todas las categorías
+                btn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100 scale-100';
+                modalState.category = null;
+                renderStep1(); 
+            }
         });
     }
 
     container.classList.remove('hidden');
     container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
 
-    // Si ya viene con categoría (ej: desde Alertas), vamos directo al paso 2
+    // Mantenemos el estilo del botón si el modal se cerró y se vuelve a abrir en modo vacaciones
+    const vacBtn = $('#vacation-toggle-btn');
+    if (vacBtn) {
+        if (isVacationMode) {
+            vacBtn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-blue-100 text-blue-600 scale-110 shadow-sm border border-blue-200';
+        } else {
+            vacBtn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100 scale-100';
+        }
+    }
+
+    // Lógica de navegación inicial
     if (category) {
         modalState.category = category;
+        renderStep2();
+    } else if (isVacationMode) {
+        // Si el modo vacaciones está activo al abrir, forzamos Viajes
+        modalState.category = 'Viajes';
         renderStep2();
     } else {
         renderStep1();
@@ -1936,9 +1978,6 @@ function closeModal() {
     const container = $('#expense-modal');
     if (container) container.classList.add('hidden');
 }
-
-
-// main.js - Sustituye renderStep1 y renderStep2
 
 function renderStep1() {
     modalState.step = 1;
@@ -1972,12 +2011,9 @@ function renderStep1() {
         
         // Si ambas son prioritarias, mantener orden de la lista HIGH_PRIORITY
         if (prioA !== -1 && prioB !== -1) return prioA - prioB;
-        // Si solo A es prioritaria, A sube
         if (prioA !== -1) return -1;
-        // Si solo B es prioritaria, B sube
         if (prioB !== -1) return 1;
 
-        // Regla 3: El resto por defecto (orden original o alfabético si quisieras)
         return 0; 
     });
 
@@ -2013,8 +2049,15 @@ function renderStep1() {
 function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
-    $('#modal-title').textContent = `${emoji} ${modalState.category}`;
-    $('#modal-back-btn').classList.remove('hidden');
+    
+    // 🌴 Si es modo vacaciones, el título es personalizado y no dejamos ir "Atrás"
+    if (isVacationMode) {
+        $('#modal-title').textContent = '✈️ Modo Viaje 🌴';
+        $('#modal-back-btn').classList.add('hidden');
+    } else {
+        $('#modal-title').textContent = `${emoji} ${modalState.category}`;
+        $('#modal-back-btn').classList.remove('hidden');
+    }
 
     let extraFields = '';
     if (modalState.category === 'Super') {
@@ -2072,6 +2115,7 @@ function renderStep2() {
 
     $('#step2-form').addEventListener('submit', handleFormSubmit);
 }
+
 
 // main.js - Reemplaza handleFormSubmit
 
