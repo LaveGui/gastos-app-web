@@ -2195,21 +2195,21 @@ async function handleFormSubmit(e) {
     try {
         if (modalState.isEdit) {
             // SI ESTAMOS EDITANDO
-            data.id = modalState.editId;
+            data.rowId = modalState.editId; // 🛠️ CORREGIDO: Usamos rowId en vez de id
             const result = await apiService.call('updateExpense', data);
             if (result.status === 'success') {
                 showToast('Gasto actualizado');
                 closeModal();
                 modalState.isEdit = false; // Limpiamos estado
-                await loadInitialData(); // Recargamos la interfaz
+                await loadInitialDataWithCache(); // Recargamos la interfaz
             } else throw new Error(result.message);
         } else {
             // SI ES UN GASTO NUEVO
             const result = await apiService.call('addExpense', data);
             if (result.status === 'success') {
                 closeModal();
-                showSuccessCard(result.data.receipt);
-                await loadInitialData();
+                showPremiumToast(result.data.receipt, result.data.budgetInfo, result.data.comparativa);
+                await loadInitialDataWithCache();
             } else throw new Error(result.message);
         }
     } catch (error) {
@@ -2242,9 +2242,9 @@ window.handleEditClick = function(e) {
         step: 2,
         category: gasto.categoria,
         isEdit: true,
-        editId: gasto.id,
+        editId: gasto.rowid || gasto.id, // 🛠️ CORREGIDO: Usamos rowid
         fecha: gasto.fecha,
-        detalle: gasto.detalle // Guardamos el detalle en memoria para no borrarlo
+        detalle: gasto.detalle 
     };
 
     // 2. Abrimos el modal contenedor visualmente
