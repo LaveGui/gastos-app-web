@@ -2173,84 +2173,58 @@ function renderStep2() {
 }
 
 
-// main.js - Reemplaza handleFormSubmit
-
 async function handleFormSubmit(e) {
     e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
-    
-    // 1. Lógica inteligente para el detalle (Supermercados)
-    let detalle = formData.get('detalle');
-    if (modalState.category === 'Super') {
-        if (modalState.subCategory === 'Otro') {
-             if(!detalle) detalle = 'Supermercado';
-        } else {
-             detalle = modalState.subCategory || 'Supermercado';
-        }
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> Procesando...';
+
+    let amount = parseFloat(document.getElementById('monto').value.replace(',', '.'));
+    let detail = document.getElementById('detalle').value.trim();
+    const split50 = document.getElementById('esCompartido') ? document.getElementById('esCompartido').checked : false;
+
+    // Autocompletado del Super
+    if (modalState.category === 'Super' && !detail) {
+        detail = modalState.subCategory || 'Supermercado';
     }
 
-    const data = { 
-        categoria: modalState.category, 
-        monto: parseFloat(formData.get('monto').replace(',', '.')), 
-        detalle: detalle, 
-        esCompartido: formData.get('esCompartido') === 'on' 
+    // Lógica del 50%
+    if (split50) {
+        amount = amount / 2;
+        detail = detail ? `${detail} (Mitad)` : '(Mitad)';
+    }
+
+    const data = {
+        monto: amount,
+        detalle: detail || modalState.category,
+        categoria: modalState.category,
+        fecha: modalState.isEdit ? modalState.fecha : (modalState.defaultDate || new Date().toISOString().split('T')[0])
     };
 
-    if (!data.categoria) {
-        showToast('Error interno: Categoría no definida', 'error');
-        return;
-    }
-
-    if (modalState.defaultDate) data.fecha = modalState.defaultDate;
-
-    closeModal();
-    showLoader('Procesando gasto...');
-
     try {
-        const action = modalState.defaultDate ? 'addForgottenExpense' : 'addExpense';
-        const result = await apiService.call(action, data);
-
-        triggerHaptic('success'); 
-
-        if (action === 'addExpense' && result.data.receipt) {
-            // A. Refrescamos datos de fondo
-            refreshStateAndUI(); 
-            
-            // B. Preparamos la comparativa
-            const comparativa = result.data.comparativa; 
-            let comparisonData = null;
-
-            if (comparativa) {
-                const gastoMesPasado = comparativa.gastoPasado;
-                // Para la diferencia, usamos el gasto actual recién devuelto por la API
-                const gastoActual = result.data.budgetInfo.gastado;
-                const diff = gastoActual - gastoMesPasado;
-                
-                comparisonData = {
-                    mesPasado: comparativa.mesPasado,
-                    gastoPasado: gastoMesPasado,
-                    diferencia: diff
-                };
-            }
-
-            // C. LLAMADA AL MODAL CORREGIDA
-            // AQUÍ ESTABA EL ERROR: Antes pasábamos un objeto manual con 'porcentaje: 0'
-            // AHORA: Pasamos directamente 'result.data.budgetInfo' que trae el 68% real.
-            showExpenseSummaryModal(
-                result.data.receipt, 
-                result.data.budgetInfo, // <--- ¡ESTO TRAE EL PORCENTAJE REAL!
-                comparisonData
-            );
-
+        if (modalState.isEdit) {
+            // SI ESTAMOS EDITANDO
+            data.id = modalState.editId;
+            const result = await apiService.call('updateExpense', data);
+            if (result.status === 'success') {
+                showToast('Gasto actualizado');
+                closeModal();
+                modalState.isEdit = false; // Limpiamos
+                await loadInitialData(); // Recargamos la interfaz
+            } else throw new Error(result.message);
         } else {
-            showToast("Gasto olvidado añadido.", 'success');
+            // SI ES UN GASTO NUEVO
+            const result = await apiService.call('addExpense', data);
+            if (result.status === 'success') {
+                closeModal();
+                showSuccessCard(result.data.receipt);
+                await loadInitialData();
+            } else throw new Error(result.message);
         }
-    } catch (error) { 
-        triggerHaptic('warning'); 
-        showToast(error.message, 'error'); 
-    } finally { 
-        hideLoader(); 
+    } catch (error) {
+        showToast('Error al guardar', 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = modalState.isEdit ? '💾 Guardar Cambios' : '🚀 Añadir Gasto';
     }
 }
 
@@ -2267,25 +2241,52 @@ function updateState(data) {
     if (data.aiAdvice) state.aiAdvice = data.aiAdvice;
 }
 
-async function handleEditClick(e) {
-    const gasto = JSON.parse(e.target.closest('[data-gasto]').dataset.gasto);
-    const nuevoMontoStr = prompt(`Introduce el nuevo monto para "${gasto.detalle || gasto.categoria}":`, gasto.monto);
+window.handleEditClick = function(e) {
+    if (typeof triggerHaptic === 'function') triggerHaptic('medium');
+    const btn = e.target.closest('button');
+    const gasto = JSON.parse(btn.dataset.gasto);
 
-    if (nuevoMontoStr) {
-        const nuevoMonto = parseFloat(nuevoMontoStr.replace(',', '.'));
-        if (!isNaN(nuevoMonto) && nuevoMonto > 0) {
-            try {
-                showLoader('Editando gasto...');
-                const result = await apiService.call('updateExpense', { rowId: gasto.rowid, monto: nuevoMonto, categoria: gasto.categoria });
-                if (result.status !== 'success') throw new Error(result.message);
-                
-                await refreshStateAndUI();
-                updateLastUpdatedTime(`Gasto editado en ${gasto.categoria}`);
-                showToast('Monto actualizado', 'success');
-            } catch (error) { showToast(error.message, 'error'); } finally { hideLoader(); }
-        } else { showToast('Monto no válido.', 'error'); }
+    // 1. Preparamos el estado de la app para MODO EDICIÓN
+    modalState = {
+        step: 2,
+        category: gasto.categoria,
+        isEdit: true,
+        editId: gasto.id,
+        fecha: gasto.fecha
+    };
+
+    // 2. Si es del Super, intentamos detectar el botón (Mercadona/Consum)
+    if (gasto.categoria === 'Super') {
+        const det = gasto.detalle.toLowerCase();
+        if (det.includes('mercadona')) modalState.subCategory = 'Mercadona';
+        else if (det.includes('consum')) modalState.subCategory = 'Consum';
+        else modalState.subCategory = 'Otro';
     }
-}
+
+    // 3. Abrimos el modal contenedor visualmente
+    let container = document.getElementById('expense-modal');
+    if (container) {
+        container.classList.remove('hidden');
+        container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
+    }
+
+    // 4. Pintamos el Paso 2 (El diseño moderno)
+    renderStep2();
+
+    // 5. Rellenamos los datos mágicamente
+    setTimeout(() => {
+        const montoInput = document.getElementById('monto');
+        const detalleInput = document.getElementById('detalle');
+        
+        if (montoInput) montoInput.value = gasto.monto;
+        
+        // Si el detalle era igual a la categoría (ej: "Super"), lo dejamos vacío para que no estorbe
+        if (detalleInput && gasto.detalle !== gasto.categoria) {
+            detalleInput.value = gasto.detalle;
+        }
+    }, 50);
+};
+
 
 // main.js - Reemplaza handleDeleteClick
 async function handleDeleteClick(e) {
