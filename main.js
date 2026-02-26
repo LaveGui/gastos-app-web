@@ -2237,12 +2237,15 @@ window.handleEditClick = function(e) {
     const btn = e.target.closest('button');
     const gasto = JSON.parse(btn.dataset.gasto);
 
+    // 🕵️‍♂️ EL BLINDAJE: Buscamos el ID sin importar cómo venga escrito en la base de datos
+    const idCorrecto = gasto.rowId || gasto.rowid || gasto.id;
+
     // 1. Preparamos el estado de la app
     modalState = {
         step: 2,
         category: gasto.categoria,
         isEdit: true,
-        editId: gasto.rowid || gasto.id, // 🛠️ CORREGIDO: Usamos rowid
+        editId: idCorrecto, // <-- AHORA NUNCA SERÁ 0
         fecha: gasto.fecha,
         detalle: gasto.detalle 
     };
