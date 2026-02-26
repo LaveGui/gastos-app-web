@@ -1,4 +1,4 @@
-// main.js - v5.1 - LIMPIO Y CONSOLIDADO
+    // main.js - v5.1 - LIMPIO Y CONSOLIDADO
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbyjaJL8AXKQKsY3VzoFGYEjo9XQX8DhCI6gmMZnQXJ_GbhrWRnoLK-0O2RaAp3W3VYUXg/exec';
 const $ = (selector) => document.querySelector(selector);
@@ -2055,11 +2055,12 @@ function renderStep2() {
         $('#modal-title').textContent = '✈️ Modo Viaje 🌴';
         $('#modal-back-btn').classList.add('hidden');
     } else {
-        $('#modal-title').textContent = `${emoji} ${modalState.category}`;
+        $('#modal-title').textContent = 'Detalles del Gasto'; // Título neutro
         $('#modal-back-btn').classList.remove('hidden');
     }
 
     let extraFields = '';
+    // Lógica para mostrar los botones de Mercadona/Consum si es Super
     if (modalState.category === 'Super') {
         extraFields = `
             <div class="mb-4">
@@ -2072,8 +2073,28 @@ function renderStep2() {
             </div>`;
     }
 
+    // Generar opciones de categoría para el selector
+    const categoryOptions = Object.keys(CATEGORY_EMOJIS).map(cat => {
+        return `<option value="${cat}" ${cat === modalState.category ? 'selected' : ''}>${CATEGORY_EMOJIS[cat]} ${cat}</option>`;
+    }).join('');
+
     const formHtml = `
-        <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> ${extraFields}
+        <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> 
+            
+            <div class="${isVacationMode ? 'hidden' : ''}">
+                <label for="edit-categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <div class="relative">
+                    <select id="edit-categoria" class="block w-full pl-3 pr-10 py-3 text-base text-gray-900 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 font-medium appearance-none">
+                        ${categoryOptions}
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                        <span class="text-xs">▼</span>
+                    </div>
+                </div>
+            </div>
+
+            ${extraFields}
+            
             <div>
                 <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
                 <div class="relative">
@@ -2102,14 +2123,49 @@ function renderStep2() {
     // Auto-foco
     setTimeout(() => { 
         const m = $('#monto'); 
-        if(m) m.focus(); 
+        if(m && !m.value) m.focus(); 
     }, 100);
+
+    // Lógica para que la app sepa si cambiaste la categoría
+    const catSelect = $('#edit-categoria');
+    if (catSelect) {
+        catSelect.addEventListener('change', (e) => {
+            modalState.category = e.target.value;
+            
+            // Guardamos los valores que ya habías escrito por si acaso
+            const currentMonto = $('#monto').value;
+            const currentDetalle = $('#detalle').value;
+            const currentCheck = $('#esCompartido').checked;
+            
+            // Re-renderizamos para añadir/quitar los botones de Mercadona si cambias a "Super"
+            renderStep2(); 
+            
+            // Restauramos lo que habías escrito
+            setTimeout(() => {
+                $('#monto').value = currentMonto;
+                $('#detalle').value = currentDetalle;
+                $('#esCompartido').checked = currentCheck;
+            }, 50);
+        });
+    }
 
     $$('.super-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             triggerHaptic('light');
             modalState.subCategory = btn.dataset.super;
+            
+            // Idem: Guardamos y restauramos para que no se borre el importe al hacer clic
+            const currentMonto = $('#monto').value;
+            const currentDetalle = $('#detalle').value;
+            const currentCheck = $('#esCompartido').checked;
+            
             renderStep2(); 
+            
+            setTimeout(() => {
+                $('#monto').value = currentMonto;
+                $('#detalle').value = currentDetalle;
+                $('#esCompartido').checked = currentCheck;
+            }, 50);
         });
     });
 
