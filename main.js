@@ -2050,30 +2050,15 @@ function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
     
-    // 🌴 Si es modo vacaciones, el título es personalizado y no dejamos ir "Atrás"
     if (isVacationMode) {
         $('#modal-title').textContent = '✈️ Modo Viaje 🌴';
         $('#modal-back-btn').classList.add('hidden');
     } else {
-        $('#modal-title').textContent = 'Detalles del Gasto'; // Título neutro
+        $('#modal-title').textContent = modalState.isEdit ? '✏️ Editar Gasto' : `${emoji} ${modalState.category}`;
         $('#modal-back-btn').classList.remove('hidden');
     }
 
-    let extraFields = '';
-    // Lógica para mostrar los botones de Mercadona/Consum si es Super
-    if (modalState.category === 'Super') {
-        extraFields = `
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">¿Dónde?</label>
-                <div class="grid grid-cols-3 gap-2">
-                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Mercadona' ? 'bg-green-100 border-green-500 ring-2 ring-green-500' : 'bg-white'}" data-super="Mercadona">Mercadona</button>
-                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Consum' ? 'bg-orange-100 border-orange-500 ring-2 ring-orange-500' : 'bg-white'}" data-super="Consum">Consum</button>
-                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Otro' ? 'bg-gray-100 border-gray-500 ring-2 ring-gray-500' : 'bg-white'}" data-super="Otro">Otro</button>
-                </div>
-            </div>`;
-    }
-
-    // Generar opciones de categoría para el selector
+    // Opciones del selector de categorías
     const categoryOptions = Object.keys(CATEGORY_EMOJIS).map(cat => {
         return `<option value="${cat}" ${cat === modalState.category ? 'selected' : ''}>${CATEGORY_EMOJIS[cat]} ${cat}</option>`;
     }).join('');
@@ -2081,8 +2066,9 @@ function renderStep2() {
     const formHtml = `
         <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> 
             
-            <div class="${isVacationMode ? 'hidden' : ''}">
-                <label for="edit-categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+            ${modalState.isEdit ? `
+            <div>
+                <label for="edit-categoria" class="block text-sm font-medium text-gray-700 mb-1">Cambiar Categoría</label>
                 <div class="relative">
                     <select id="edit-categoria" class="block w-full pl-3 pr-10 py-3 text-base text-gray-900 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 font-medium appearance-none">
                         ${categoryOptions}
@@ -2091,9 +2077,17 @@ function renderStep2() {
                         <span class="text-xs">▼</span>
                     </div>
                 </div>
-            </div>
+            </div>` : ''}
 
-            ${extraFields}
+            ${(modalState.category === 'Super' && !modalState.isEdit) ? `
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">¿Dónde?</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Mercadona' ? 'bg-green-100 border-green-500 ring-2 ring-green-500' : 'bg-white'}" data-super="Mercadona">Mercadona</button>
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Consum' ? 'bg-orange-100 border-orange-500 ring-2 ring-orange-500' : 'bg-white'}" data-super="Consum">Consum</button>
+                    <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Otro' ? 'bg-gray-100 border-gray-500 ring-2 ring-gray-500' : 'bg-white'}" data-super="Otro">Otro</button>
+                </div>
+            </div>` : ''}
             
             <div>
                 <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
@@ -2104,17 +2098,20 @@ function renderStep2() {
                         placeholder="0.00" autocomplete="off">
                 </div>
             </div>
+
+            ${!modalState.isEdit ? `
             <div id="detalle-container">
                 <label for="detalle" class="block text-sm font-medium text-gray-700 mb-1">Detalle (Opcional)</label>
                 <input type="text" name="detalle" id="detalle" class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Ej: Cena, Regalo...">
-            </div>
+            </div>` : ''}
+
             <div class="flex items-center pt-2">
                 <input type="checkbox" id="esCompartido" name="esCompartido" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label>
             </div>
             
             <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4 mb-10">
-                Guardar Gasto
+                ${modalState.isEdit ? '💾 Guardar Cambios' : '🚀 Añadir Gasto'}
             </button>
         </form>`;
 
@@ -2126,24 +2123,18 @@ function renderStep2() {
         if(m && !m.value) m.focus(); 
     }, 100);
 
-    // Lógica para que la app sepa si cambiaste la categoría
+    // Si cambias la categoría editando, recargamos el form
     const catSelect = $('#edit-categoria');
     if (catSelect) {
         catSelect.addEventListener('change', (e) => {
             modalState.category = e.target.value;
-            
-            // Guardamos los valores que ya habías escrito por si acaso
             const currentMonto = $('#monto').value;
-            const currentDetalle = $('#detalle').value;
             const currentCheck = $('#esCompartido').checked;
             
-            // Re-renderizamos para añadir/quitar los botones de Mercadona si cambias a "Super"
             renderStep2(); 
             
-            // Restauramos lo que habías escrito
             setTimeout(() => {
                 $('#monto').value = currentMonto;
-                $('#detalle').value = currentDetalle;
                 $('#esCompartido').checked = currentCheck;
             }, 50);
         });
@@ -2151,19 +2142,17 @@ function renderStep2() {
 
     $$('.super-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            triggerHaptic('light');
+            if (typeof triggerHaptic === 'function') triggerHaptic('light');
             modalState.subCategory = btn.dataset.super;
-            
-            // Idem: Guardamos y restauramos para que no se borre el importe al hacer clic
             const currentMonto = $('#monto').value;
-            const currentDetalle = $('#detalle').value;
+            const currentDetalle = $('#detalle') ? $('#detalle').value : '';
             const currentCheck = $('#esCompartido').checked;
             
             renderStep2(); 
             
             setTimeout(() => {
                 $('#monto').value = currentMonto;
-                $('#detalle').value = currentDetalle;
+                if ($('#detalle')) $('#detalle').value = currentDetalle;
                 $('#esCompartido').checked = currentCheck;
             }, 50);
         });
@@ -2179,12 +2168,14 @@ async function handleFormSubmit(e) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> Procesando...';
 
-    let amount = parseFloat(document.getElementById('monto').value.replace(',', '.'));
-    let detail = document.getElementById('detalle').value.trim();
-    const split50 = document.getElementById('esCompartido') ? document.getElementById('esCompartido').checked : false;
+    let amount = parseFloat($('#monto').value.replace(',', '.'));
+    
+    // Si editamos, cogemos el detalle de la memoria. Si es nuevo, lo cogemos del input.
+    let detail = modalState.isEdit ? modalState.detalle : ($('#detalle') ? $('#detalle').value.trim() : '');
+    const split50 = $('#esCompartido') ? $('#esCompartido').checked : false;
 
-    // Autocompletado del Super
-    if (modalState.category === 'Super' && !detail) {
+    // Autocompletado del Super (Solo para nuevos gastos)
+    if (modalState.category === 'Super' && !detail && !modalState.isEdit) {
         detail = modalState.subCategory || 'Supermercado';
     }
 
@@ -2209,7 +2200,7 @@ async function handleFormSubmit(e) {
             if (result.status === 'success') {
                 showToast('Gasto actualizado');
                 closeModal();
-                modalState.isEdit = false; // Limpiamos
+                modalState.isEdit = false; // Limpiamos estado
                 await loadInitialData(); // Recargamos la interfaz
             } else throw new Error(result.message);
         } else {
@@ -2246,47 +2237,32 @@ window.handleEditClick = function(e) {
     const btn = e.target.closest('button');
     const gasto = JSON.parse(btn.dataset.gasto);
 
-    // 1. Preparamos el estado de la app para MODO EDICIÓN
+    // 1. Preparamos el estado de la app
     modalState = {
         step: 2,
         category: gasto.categoria,
         isEdit: true,
         editId: gasto.id,
-        fecha: gasto.fecha
+        fecha: gasto.fecha,
+        detalle: gasto.detalle // Guardamos el detalle en memoria para no borrarlo
     };
 
-    // 2. Si es del Super, intentamos detectar el botón (Mercadona/Consum)
-    if (gasto.categoria === 'Super') {
-        const det = gasto.detalle.toLowerCase();
-        if (det.includes('mercadona')) modalState.subCategory = 'Mercadona';
-        else if (det.includes('consum')) modalState.subCategory = 'Consum';
-        else modalState.subCategory = 'Otro';
-    }
-
-    // 3. Abrimos el modal contenedor visualmente
-    let container = document.getElementById('expense-modal');
+    // 2. Abrimos el modal contenedor visualmente
+    let container = $('#expense-modal');
     if (container) {
         container.classList.remove('hidden');
         container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
     }
 
-    // 4. Pintamos el Paso 2 (El diseño moderno)
+    // 3. Pintamos el diseño
     renderStep2();
 
-    // 5. Rellenamos los datos mágicamente
+    // 4. Rellenamos el importe mágicamente
     setTimeout(() => {
-        const montoInput = document.getElementById('monto');
-        const detalleInput = document.getElementById('detalle');
-        
+        const montoInput = $('#monto');
         if (montoInput) montoInput.value = gasto.monto;
-        
-        // Si el detalle era igual a la categoría (ej: "Super"), lo dejamos vacío para que no estorbe
-        if (detalleInput && gasto.detalle !== gasto.categoria) {
-            detalleInput.value = gasto.detalle;
-        }
     }, 50);
 };
-
 
 // main.js - Reemplaza handleDeleteClick
 async function handleDeleteClick(e) {
