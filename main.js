@@ -627,7 +627,8 @@ async function renderGastosView() {
             // Ahora los datos vienen limpios de la nueva función de la API
             const normalizedData = sourceData.map((g, index) => {
                 return {
-                    id: g.id || index,
+                    ...g, // 🛠️ MAGIA: Esto conserva todos los datos originales (incluido el rowid)
+                    id: g.id || g.rowid || g.rowId || index,
                     fecha: g.fecha || new Date().toISOString(), 
                     categoria: String(g.categoria || 'Sin Categoría'),
                     detalle: String(g.detalle || ''), 
