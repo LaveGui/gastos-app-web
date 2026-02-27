@@ -2149,27 +2149,16 @@ async function handleFormSubmit(e) {
         if (action === 'addExpense' && result.data.receipt) {
             refreshStateAndUI(); 
             
-            const comparativa = result.data.comparativa; 
-            let comparisonData = null;
-
-            if (comparativa) {
-                const gastoMesPasado = comparativa.gastoPasado;
-                const gastoActual = result.data.budgetInfo.gastado;
-                const diff = gastoActual - gastoMesPasado;
-                
-                comparisonData = {
-                    mesPasado: comparativa.mesPasado,
-                    gastoPasado: gastoMesPasado,
-                    diferencia: diff
-                };
+            // ✅ EL FIX DEFINITIVO: Llamamos a tu función exacta pasando los 2 parámetros que espera
+            if (typeof window.showSuccessCard === 'function') {
+                window.showSuccessCard(
+                    result.data.receipt, 
+                    result.data.budgetInfo
+                );
+            } else {
+                // Fallback de seguridad por si falla la carga
+                showToast('Gasto guardado con éxito', 'success');
             }
-
-            // ✅ AQUÍ ESTÁ EL FIX: Llamamos a tu función original en lugar del invento mío
-            showPremiumToast(
-                result.data.receipt, 
-                result.data.budgetInfo, 
-                comparisonData
-            );
 
         } else {
             // Si es un editado o un olvidado, refrescamos y mostramos un simple Toast
