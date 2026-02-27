@@ -2204,13 +2204,16 @@ async function handleFormSubmit(e) {
                 modalState.isEdit = false; // Limpiamos estado
                 await loadInitialDataWithCache(); // Recargamos la interfaz
             } else throw new Error(result.message);
-        } else {
+            } else {
             // SI ES UN GASTO NUEVO
             const result = await apiService.call('addExpense', data);
             if (result.status === 'success') {
-                closeModal();
-                showPremiumToast(result.data.receipt, result.data.budgetInfo, result.data.comparativa);
-                await loadInitialDataWithCache();
+                closeModal(); // Cerramos el formulario de añadir
+                
+                // 🌟 LLAMAMOS A LA TARJETA PREMIUM 🌟
+                window.showSuccessCard(result.data.receipt, result.data.budgetInfo);
+                
+                await loadInitialDataWithCache(); // Recargamos para que se actualice la lista de fondo
             } else throw new Error(result.message);
         }
     } catch (error) {
@@ -2378,121 +2381,8 @@ function showConfirmationToast(receipt, budgetInfo, comparisonData = null) {
     // Auto-cierre a los 8 segundos para que dé tiempo a leer la comparación
     setTimeout(close, 8000);
 }
-// main.js - AÑADIR AL FINAL (Reemplaza la lógica de showConfirmationToast antigua)
 
-function showPremiumToast(receipt, budgetInfo, comparisonData) {
-    const container = $('#toast-container');
-    if (!container) return;
-    
-    // Limpiamos toasts anteriores
-    container.innerHTML = '';
 
-    const percent = budgetInfo.porcentaje || 0;
-    const isOverBudget = percent > 100;
-    const progressBarColor = isOverBudget ? 'bg-red-500' : 'bg-blue-600';
-    const percentColor = isOverBudget ? 'text-red-600' : 'text-blue-600';
-    
-    // Formateo de moneda
-    const fmt = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-
-    // Lógica de Comparativa (Vs Mes Pasado)
-    let comparisonHTML = '';
-    if (comparisonData) {
-        const diff = comparisonData.diferencia; // Positivo = gastaste más
-        const icon = diff > 0 ? '📈' : '📉';
-        const color = diff > 0 ? 'text-red-500' : 'text-green-600';
-        const text = diff > 0 ? 'más' : 'menos';
-        
-        if (Math.abs(diff) > 1) { // Solo mostrar si la diferencia es relevante (>1€)
-            comparisonHTML = `
-                <div class="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span class="text-gray-400">Vs. mes pasado</span>
-                    <span class="${color} font-bold flex items-center bg-gray-50 px-2 py-1 rounded-full">
-                        ${icon} ${Math.abs(diff).toFixed(0)}€ ${text}
-                    </span>
-                </div>
-            `;
-        }
-    }
-
-    const toastHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 w-full max-w-sm mx-auto animate-toast-entry relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-20 h-20 bg-blue-50 rounded-full -mr-10 -mt-10 z-0"></div>
-            
-            <div class="relative z-10">
-                <div class="flex justify-between items-start mb-1">
-                    <div>
-                        <h4 class="text-gray-500 text-xs font-bold uppercase tracking-wider">Gasto Registrado</h4>
-                        <h3 class="text-xl font-bold text-gray-800 mt-1">${receipt.categoria}</h3>
-                    </div>
-                    <div class="text-right">
-                        <span class="block text-2xl font-bold text-gray-900">${fmt(receipt.monto)}</span>
-                    </div>
-                </div>
-
-                <div class="mt-3 mb-1">
-                    <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-500">Presupuesto usado</span>
-                        <span class="font-bold ${percentColor}">${percent.toFixed(0)}%</span>
-                    </div>
-                    <div class="w-full bg-gray-100 rounded-full h-2">
-                        <div class="${progressBarColor} h-2 rounded-full transition-all duration-1000" style="width: ${Math.min(percent, 100)}%"></div>
-                    </div>
-                    <div class="flex justify-between text-xs mt-1 text-gray-400">
-                        <span>Llevas ${fmt(budgetInfo.gastado)}</span>
-                        <span>Meta ${fmt(budgetInfo.presupuesto)}</span>
-                    </div>
-                </div>
-
-                ${comparisonHTML}
-
-                <div class="flex gap-3 mt-4">
-                    <button id="toast-undo-btn" class="flex-1 bg-gray-50 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition border border-gray-200">
-                        Deshacer
-                    </button>
-                    <button id="toast-ok-btn" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-md shadow-blue-200">
-                        Aceptar
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = toastHTML;
-
-    // Listeners
-    $('#toast-ok-btn').addEventListener('click', () => {
-        triggerHaptic('light');
-        container.innerHTML = ''; // Cerrar
-    });
-
-    $('#toast-undo-btn').addEventListener('click', () => {
-        triggerHaptic('warning');
-        container.innerHTML = '';
-        // Lógica para borrar el gasto recién creado
-        // Simulamos un clic en el botón de borrar usando el rowid del recibo
-        if (receipt.rowid) {
-            // Creamos un botón falso con los datos necesarios para reutilizar la función handleDelete
-            const fakeBtn = document.createElement('button');
-            fakeBtn.dataset.gasto = JSON.stringify(receipt);
-            fakeBtn.classList.add('delete-btn'); // Clase necesaria para que handleDelete funcione
-            // Hack: Llamamos a la API directamente
-            if(confirm(`¿Borrar el gasto de ${receipt.monto}€ en ${receipt.categoria}?`)) {
-                showLoader('Deshaciendo...');
-                apiService.call('deleteExpense', { rowId: receipt.rowid, categoria: receipt.categoria })
-                    .then(() => {
-                        refreshStateAndUI();
-                        showToast('Operación deshecha', 'info');
-                    })
-                    .catch(e => showToast(e.message, 'error'))
-                    .finally(() => hideLoader());
-            }
-        }
-    });
-
-    // Auto-cierre largo (10 segundos)
-    setTimeout(() => { container.innerHTML = ''; }, 10000);
-}
 
 // --- SERVICIOS Y UTILIDADES ---
 
@@ -2694,111 +2584,103 @@ function triggerHaptic(type = 'light') {
     // Ejecutamos el patrón
     navigator.vibrate(patterns[type] || 10);
 }
-// main.js - VERSIÓN LIMPIA CON % (Sin barra de progreso)
 
-function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
-    // 1. Limpieza preventiva
-    const existing = document.getElementById('success-modal-overlay');
+// --- TARJETA DE ÉXITO PREMIUM ---
+window.showSuccessCard = function(receipt, budgetInfo = null) {
+    // 1. Limpiamos si hay alguna tarjeta anterior abierta
+    const existing = document.getElementById('success-overlay');
     if (existing) existing.remove();
 
-    // 2. Formateo de datos
-    const formatMoney = (n) => n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    
-    // Cálculos de porcentaje
-    const percent = budgetInfo.porcentaje || 0;
-    const isOverBudget = percent > 100;
-    // Color del texto del porcentaje (Rojo si te pasas, Gris/Azul si vas bien)
-    const percentColor = isOverBudget ? 'text-red-600 bg-red-50 border-red-100' : 'text-blue-600 bg-blue-50 border-blue-100';
+    const emoji = CATEGORY_EMOJIS[receipt.categoria] || '💰';
+    const montoStr = parseFloat(receipt.monto).toFixed(2) + '€';
+    const detalleStr = receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : receipt.categoria;
 
-    // 3. Comparativa (Solo recurrentes)
-    const RECURRENT_CATEGORIES = ['WiFi', 'Gas', 'Agua', 'Luz', 'Gym', 'Comunidad', 'Hipoteca', 'Alquiler'];
-    const showComparison = RECURRENT_CATEGORIES.some(c => normalizeString(c) === normalizeString(receipt.categoria));
-    
-    let comparisonHTML = '';
-    if (showComparison && comparisonData) {
-        const diff = comparisonData.diferencia;
-        if (Math.abs(diff) > 0.1) {
-            const isMore = diff > 0;
-            const icon = isMore ? '📈' : '📉';
-            const colorClass = isMore ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-green-700 bg-green-50 border-green-200';
-            const text = isMore ? 'más que el mes pasado' : 'menos que el mes pasado';
-            
-            comparisonHTML = `
-                <div class="mt-3 inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold ${colorClass} border shadow-sm">
-                    <span class="mr-1.5 text-base">${icon}</span>
-                    <span>${formatMoney(Math.abs(diff))} ${text}</span>
+    // 2. Lógica de la barra de progreso (El Contexto)
+    let budgetHtml = '';
+    if (budgetInfo && budgetInfo.presupuesto > 0) {
+        const porcentaje = Math.min(budgetInfo.porcentaje, 100);
+        const colorClass = porcentaje >= 100 ? 'bg-red-500' : (porcentaje >= 80 ? 'bg-orange-400' : 'bg-green-500');
+        
+        budgetHtml = `
+            <div class="mt-5 bg-gray-50 rounded-2xl p-4 border border-gray-100 shadow-sm">
+                <div class="flex justify-between text-xs font-bold mb-2 uppercase tracking-wider">
+                    <span class="text-gray-500">Presupuesto</span>
+                    <span class="text-gray-800">${parseFloat(budgetInfo.gastado).toFixed(2)}€ / ${parseFloat(budgetInfo.presupuesto).toFixed(2)}€</span>
                 </div>
-            `;
-        }
+                <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div class="${colorClass} h-2 rounded-full transition-all duration-1000 ease-out" style="width: 0%" id="budget-progress-bar" data-width="${porcentaje}%"></div>
+                </div>
+            </div>
+        `;
     }
 
-    // 4. HTML Estructura (Centrado y Grande)
-    const modalHTML = `
-        <div id="success-modal-overlay" class="fixed inset-0 z-[100] flex items-center justify-center px-4 modal-backdrop bg-black/60 backdrop-blur-sm">
-            <div class="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 relative modal-card flex flex-col items-center text-center">
+    // 3. El Diseño Visual Espectacular
+    const html = `
+        <div id="success-overlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+            <div class="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl transform scale-95 opacity-0 transition-all duration-300" id="success-card">
                 
-                <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mb-4 shadow-sm animate-bounce-subtle">
-                    <span class="text-2xl">✅</span>
+                <div class="bg-gradient-to-br from-green-400 to-emerald-600 p-8 text-center relative overflow-hidden">
+                    <div class="absolute inset-0 flex items-center justify-center text-9xl transform -translate-y-4 opacity-10 pointer-events-none">✨</div>
+                    <div class="relative z-10">
+                        <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl mx-auto mb-4 shadow-xl transform transition-transform hover:scale-110">
+                            ${emoji}
+                        </div>
+                        <h2 class="text-white text-5xl font-black tracking-tighter drop-shadow-md">${montoStr}</h2>
+                        <p class="text-green-50 font-medium mt-2 text-lg opacity-90">${detalleStr}</p>
+                    </div>
                 </div>
 
-                <h3 class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Gasto Guardado</h3>
-                <div class="text-4xl font-black text-gray-900 tracking-tight mb-1">
-                    ${formatMoney(receipt.monto)}
-                </div>
-                <div class="text-lg text-gray-700 font-medium flex items-center justify-center gap-2">
-                    <span>${CATEGORY_EMOJIS[receipt.categoria] || '💰'}</span>
-                    <span>${receipt.categoria}</span>
-                </div>
-                <div class="text-sm text-gray-400 mt-1">${receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : ''}</div>
+                <div class="p-6 pb-8">
+                    ${budgetHtml}
 
-                <div class="mt-3 inline-block px-3 py-1 rounded-full text-sm font-bold border ${percentColor}">
-                    Llevas el ${percent.toFixed(0)}% del presupuesto
+                    <div class="mt-6 space-y-3">
+                        <button id="btn-success-close" class="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-gray-800 hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-3 text-lg">
+                            <span>Aceptar</span>
+                            <span id="success-timer" class="text-xs text-gray-400 font-normal bg-gray-800 px-3 py-1 rounded-full">30s</span>
+                        </button>
+                        
+                        <div class="grid grid-cols-2 gap-3 pt-2">
+                            <button id="btn-success-edit" class="w-full bg-blue-50 text-blue-600 font-bold py-3.5 rounded-2xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
+                                ✏️ Editar
+                            </button>
+                            <button id="btn-success-delete" class="w-full bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2">
+                                🗑️ Eliminar
+                            </button>
+                        </div>
+                    </div>
                 </div>
-
-                ${comparisonHTML}
-
-                <div class="grid grid-cols-2 gap-3 w-full mt-8">
-                    <button id="btn-success-edit" class="flex items-center justify-center py-3 px-4 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
-                        ✏️ Editar
-                    </button>
-                    <button id="btn-success-delete" class="flex items-center justify-center py-3 px-4 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
-                        🗑️ Eliminar
-                    </button>
-                </div>
-                
-                <button id="btn-success-close" class="mt-4 w-full py-4 rounded-xl text-white font-bold text-lg bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all transform active:scale-95">
-                    Listo
-                </button>
-
-                <div class="mt-4 text-[10px] text-gray-300 font-medium" id="modal-timer-text">Cerrando en 30s</div>
             </div>
         </div>
     `;
 
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-
-    // 5. Animación de entrada
-    const overlay = document.getElementById('success-modal-overlay');
-    const card = overlay.querySelector('.modal-card');
+    document.body.insertAdjacentHTML('beforeend', html);
     
-    requestAnimationFrame(() => {
-        overlay.classList.add('visible');
-        card.classList.add('visible');
-    });
+    const overlay = document.getElementById('success-overlay');
+    const card = document.getElementById('success-card');
+    const timerText = document.getElementById('success-timer');
+    const progressBar = document.getElementById('budget-progress-bar');
 
-    // 6. Funciones de Cierre y Timers
+    // 4. Animación de entrada suave
+    setTimeout(() => {
+        overlay.classList.remove('opacity-0');
+        card.classList.remove('scale-95', 'opacity-0');
+        if (progressBar) progressBar.style.width = progressBar.dataset.width;
+    }, 10);
+
+    if (typeof triggerHaptic === 'function') triggerHaptic('success');
+
+    // 5. Temporizador de 30 segundos
     let timeLeft = 30;
-    const timerText = document.getElementById('modal-timer-text');
     
     const close = () => {
-        overlay.classList.remove('visible');
-        card.classList.remove('visible');
+        overlay.classList.add('opacity-0');
+        card.classList.add('scale-95', 'opacity-0');
         setTimeout(() => overlay.remove(), 300);
     };
 
     const interval = setInterval(() => {
         timeLeft--;
-        if (timerText) timerText.textContent = `Cerrando en ${timeLeft}s`;
+        if (timerText) timerText.textContent = `${timeLeft}s`;
         if (timeLeft <= 0) {
             clearInterval(interval);
             close();
@@ -2807,29 +2689,29 @@ function showExpenseSummaryModal(receipt, budgetInfo, comparisonData) {
 
     const stopTimer = () => clearInterval(interval);
 
-    // 7. Event Listeners
+    // 6. Funciones de los botones
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) { triggerHaptic('light'); stopTimer(); close(); }
+        if (e.target === overlay) { stopTimer(); close(); }
     });
 
     document.getElementById('btn-success-close').addEventListener('click', () => {
-        triggerHaptic('light'); stopTimer(); close();
+        stopTimer(); close();
     });
 
-    // EDITAR 
     document.getElementById('btn-success-edit').addEventListener('click', () => {
-        triggerHaptic('medium'); stopTimer(); close();
+        stopTimer(); close();
+        // Le pasamos el gasto directamente a la función de edición
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
-        setTimeout(() => handleEditClick({ target: { closest: () => dummyBtn } }), 200);
+        setTimeout(() => window.handleEditClick({ target: { closest: () => dummyBtn } }), 200);
     });
 
-    // ELIMINAR 
     document.getElementById('btn-success-delete').addEventListener('click', () => {
-        triggerHaptic('warning'); stopTimer(); close();
+        stopTimer(); close();
+        // Le pasamos el gasto a la función de borrar
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
         dummyBtn.classList.add('delete-btn'); 
-        setTimeout(() => handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
+        setTimeout(() => window.handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
     });
-}
+};
