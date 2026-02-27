@@ -2595,20 +2595,27 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
     const montoStr = parseFloat(receipt.monto).toFixed(2) + '€';
     const detalleStr = receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : receipt.categoria;
 
-    // 2. Lógica de la barra de progreso (El Contexto)
+    // 2. Lógica de la barra de progreso (El Contexto) CON PORCENTAJE
     let budgetHtml = '';
     if (budgetInfo && budgetInfo.presupuesto > 0) {
-        const porcentaje = Math.min(budgetInfo.porcentaje, 100);
-        const colorClass = porcentaje >= 100 ? 'bg-red-500' : (porcentaje >= 80 ? 'bg-orange-400' : 'bg-green-500');
+        const porcentajeReal = budgetInfo.porcentaje; 
+        const porcentajeVisual = Math.min(porcentajeReal, 100); // Para que la barra no se salga del 100%
+        
+        // Colores dinámicos para la barra y el texto del porcentaje
+        const colorClass = porcentajeReal >= 100 ? 'bg-red-500' : (porcentajeReal >= 80 ? 'bg-orange-400' : 'bg-green-500');
+        const textClass = porcentajeReal >= 100 ? 'text-red-600 bg-red-50' : (porcentajeReal >= 80 ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50');
         
         budgetHtml = `
             <div class="mt-5 bg-gray-50 rounded-2xl p-4 border border-gray-100 shadow-sm">
-                <div class="flex justify-between text-xs font-bold mb-2 uppercase tracking-wider">
-                    <span class="text-gray-500">Presupuesto</span>
+                <div class="flex justify-between items-center text-xs font-bold mb-2 uppercase tracking-wider">
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-500">Presupuesto</span>
+                        <span class="${textClass} px-2 py-0.5 rounded-md font-black">${porcentajeReal.toFixed(0)}%</span>
+                    </div>
                     <span class="text-gray-800">${parseFloat(budgetInfo.gastado).toFixed(2)}€ / ${parseFloat(budgetInfo.presupuesto).toFixed(2)}€</span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                    <div class="${colorClass} h-2 rounded-full transition-all duration-1000 ease-out" style="width: 0%" id="budget-progress-bar" data-width="${porcentaje}%"></div>
+                    <div class="${colorClass} h-2 rounded-full transition-all duration-1000 ease-out" style="width: 0%" id="budget-progress-bar" data-width="${porcentajeVisual}%"></div>
                 </div>
             </div>
         `;
