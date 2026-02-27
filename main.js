@@ -1892,7 +1892,7 @@ async function populateInvestmentFundDropdowns() {
 function openModal(category = null, defaultDate = null, editGasto = null) {
     // Reset del estado
     modalState = {
-        step: editGasto ? 2 : 1, // Si editamos, saltamos directo al paso 2
+        step: editGasto ? 2 : 1, 
         category: editGasto ? editGasto.categoria : category,
         subCategory: null,
         defaultDate: defaultDate,
@@ -1912,9 +1912,9 @@ function openModal(category = null, defaultDate = null, editGasto = null) {
             <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center hidden z-50 transition-opacity duration-300">
                 <div class="bg-white w-full sm:max-w-md sm:rounded-lg rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 border-b border-gray-100">
-                        <button id="modal-back-btn" class="text-gray-400 hover:text-gray-800 p-2 hidden">⬅️ Atrás</button>
+                        <button id="modal-back-btn" class="text-gray-400 hover:text-blue-600 font-medium p-2 hidden transition-colors">⬅️ Atrás</button>
                         <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
-                        <button id="modal-close-x" class="text-gray-400 hover:text-gray-800 p-2 text-xl font-bold">&times;</button>
+                        <button id="modal-close-x" class="text-gray-400 hover:text-red-500 p-2 text-xl font-bold transition-colors">&times;</button>
                     </div>
                     <div id="modal-content" class="p-4 overflow-y-auto"></div>
                 </div>
@@ -1926,8 +1926,13 @@ function openModal(category = null, defaultDate = null, editGasto = null) {
         $('#modal-close-x').addEventListener('click', closeModal);
         $('#modal-back-btn').addEventListener('click', () => {
             triggerHaptic('light');
-            // Solo permitir volver al paso 1 si NO estamos editando
-            if (modalState.step === 2 && !modalState.editModeId) renderStep1(); 
+            // 🔓 AQUÍ ESTÁ LA MAGIA: Permitimos volver al Paso 1 SIEMPRE.
+            if (modalState.step === 2) {
+                // Actualizamos el título para que tenga sentido visualmente
+                $('#modal-title').textContent = modalState.editModeId ? '✏️ Cambiar Categoría' : 'Selecciona Categoría';
+                $('#modal-back-btn').classList.add('hidden'); // Ocultamos el botón al llegar al paso 1
+                renderStep1(); 
+            }
         });
     }
 
@@ -2017,12 +2022,14 @@ function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
     
+    // ✅ Siempre mostramos el botón para volver y cambiar categoría
+    $('#modal-back-btn').classList.remove('hidden');
+    $('#modal-back-btn').textContent = '⬅️ Categoría';
+
     if (modalState.editModeId) {
         $('#modal-title').textContent = `✏️ Editar ${modalState.category}`;
-        $('#modal-back-btn').classList.add('hidden'); // Ocultamos el botón "Atrás" en edición
     } else {
         $('#modal-title').textContent = `${emoji} ${modalState.category}`;
-        $('#modal-back-btn').classList.remove('hidden');
     }
 
     let extraFields = '';
@@ -2074,7 +2081,6 @@ function renderStep2() {
         const m = $('#monto'); 
         if(m) {
             m.focus();
-            // Movemos el cursor al final si hay texto
             if(m.value) m.setSelectionRange(m.value.length, m.value.length);
         }
     }, 100);
