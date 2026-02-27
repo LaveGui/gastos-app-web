@@ -2165,7 +2165,7 @@ async function handleFormSubmit(e) {
             }
 
             // ✅ AQUÍ ESTÁ EL FIX: Llamamos a tu función original en lugar del invento mío
-            showExpenseSummaryModal(
+            showPremiumToast(
                 result.data.receipt, 
                 result.data.budgetInfo, 
                 comparisonData
