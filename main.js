@@ -2096,7 +2096,6 @@ function renderStep2() {
     $('#step2-form').addEventListener('submit', handleFormSubmit);
 }
 
-
 async function handleFormSubmit(e) {
     e.preventDefault();
     const form = e.target;
@@ -2146,7 +2145,7 @@ async function handleFormSubmit(e) {
 
         triggerHaptic('success'); 
 
-        // Solo lanzamos el Premium Toast visual si es un gasto nuevo (addExpense)
+        // Solo lanzamos tu Modal Premium visual si es un gasto nuevo (addExpense)
         if (action === 'addExpense' && result.data.receipt) {
             refreshStateAndUI(); 
             
@@ -2165,7 +2164,8 @@ async function handleFormSubmit(e) {
                 };
             }
 
-            showPremiumToast(
+            // ✅ AQUÍ ESTÁ EL FIX: Llamamos a tu función original en lugar del invento mío
+            showExpenseSummaryModal(
                 result.data.receipt, 
                 result.data.budgetInfo, 
                 comparisonData
