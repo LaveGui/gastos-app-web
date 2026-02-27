@@ -2165,9 +2165,12 @@ function renderStep2() {
 
 async function handleFormSubmit(e) {
     e.preventDefault();
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> Procesando...';
+    
+    // 1. Cerramos el formulario al instante para que no estorbe
+    closeModal();
+
+    // 2. 🚀 ENCENDEMOS TU PANTALLA DE CARGA NATIVA
+    showLoader(modalState.isEdit ? 'Guardando cambios...' : 'Procesando gasto...');
 
     let amount = parseFloat($('#monto').value.replace(',', '.'));
     
@@ -2195,31 +2198,33 @@ async function handleFormSubmit(e) {
 
     try {
         if (modalState.isEdit) {
-            // SI ESTAMOS EDITANDO
-            data.rowId = modalState.editId; // 🛠️ CORREGIDO: Usamos rowId en vez de id
+            // --- SI ESTAMOS EDITANDO ---
+            data.rowId = modalState.editId;
             const result = await apiService.call('updateExpense', data);
+            
+            hideLoader(); // 🛑 APAGAMOS EL LOADER
+            
             if (result.status === 'success') {
                 showToast('Gasto actualizado');
-                closeModal();
                 modalState.isEdit = false; // Limpiamos estado
                 await loadInitialDataWithCache(); // Recargamos la interfaz
             } else throw new Error(result.message);
-            } else {
-            // SI ES UN GASTO NUEVO
+            
+        } else {
+            // --- SI ES UN GASTO NUEVO ---
             const result = await apiService.call('addExpense', data);
+            
+            hideLoader(); // 🛑 APAGAMOS EL LOADER
+            
             if (result.status === 'success') {
-                closeModal(); // Cerramos el formulario de añadir
-                
                 // 🌟 LLAMAMOS A LA TARJETA PREMIUM 🌟
                 window.showSuccessCard(result.data.receipt, result.data.budgetInfo);
-                
                 await loadInitialDataWithCache(); // Recargamos para que se actualice la lista de fondo
             } else throw new Error(result.message);
         }
     } catch (error) {
+        hideLoader(); // 🛑 APAGAMOS EL LOADER TAMBIÉN SI HAY ERROR
         showToast('Error al guardar', 'error');
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = modalState.isEdit ? '💾 Guardar Cambios' : '🚀 Añadir Gasto';
     }
 }
 
@@ -2722,3 +2727,4 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
         setTimeout(() => window.handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
     });
 };
+
