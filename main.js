@@ -34,8 +34,11 @@ window.investmentFunds = null; // Caché para los fondos
 let modalState = {
     step: 1,
     category: null,
-    subCategory: null, // Para Supermercados (Mercadona, etc.)
-    defaultDate: null
+    subCategory: null,
+    defaultDate: null,
+    editModeId: null, // Nuevo: Guardará el rowid si estamos editando
+    editMonto: null,  // Nuevo: Para pre-rellenar el monto
+    editDetalle: null // Nuevo: Para pre-rellenar el detalle
 };
 
 
@@ -624,11 +627,11 @@ async function renderGastosView() {
             if (deepData) titulo.innerText = `Resultados Históricos (${deepData.length})`;
             else titulo.innerText = `Tus Gastos ${showFixedExpenses ? '' : '(Sin Fijos)'}`;
 
-            // Ahora los datos vienen limpios de la nueva función de la API
+            // ❌ EL ERROR ESTABA AQUÍ: Recuperamos rowid explícitamente.
             const normalizedData = sourceData.map((g, index) => {
                 return {
-                    ...g, // 🛠️ MAGIA: Esto conserva todos los datos originales (incluido el rowid)
-                    id: g.id || g.rowid || g.rowId || index,
+                    id: g.id || index,
+                    rowid: g.rowid || g.rowId, // <-- AQUÍ ESTÁ LA SOLUCIÓN AL IDENTIFICADOR
                     fecha: g.fecha || new Date().toISOString(), 
                     categoria: String(g.categoria || 'Sin Categoría'),
                     detalle: String(g.detalle || ''), 
@@ -709,7 +712,6 @@ async function renderGastosView() {
 
                     showLoader('Descargando archivo histórico...');
                     try {
-                        // AQUÍ ESTÁ LA CLAVE: Llamamos a la nueva función
                         const result = await apiService.call('getAllExpenses');
                         if (result.status === 'success') {
                             state.allExpensesBackup = result.data || [];
@@ -1887,32 +1889,31 @@ async function populateInvestmentFundDropdowns() {
 
 // --- MODALES Y FORMULARIOS ---
 
-function openModal(category = null, defaultDate = null) {
+function openModal(category = null, defaultDate = null, editGasto = null) {
     // Reset del estado
     modalState = {
-        step: 1,
-        category: category,
+        step: editGasto ? 2 : 1, // Si editamos, saltamos directo al paso 2
+        category: editGasto ? editGasto.categoria : category,
         subCategory: null,
-        defaultDate: defaultDate
+        defaultDate: defaultDate,
+        editModeId: editGasto ? editGasto.rowid : null,
+        editMonto: editGasto ? editGasto.monto : null,
+        // Limpiamos el detalle si coincide con la categoría para no ensuciar el input
+        editDetalle: editGasto ? (editGasto.detalle !== editGasto.categoria ? editGasto.detalle : '') : null
     };
 
     let container = $('#expense-modal');
     
     // Si el modal no existe o tiene la estructura vieja, lo creamos de cero
     if (!container || !container.querySelector('#modal-content')) {
-        if (container) container.remove(); // Borramos basura anterior
+        if (container) container.remove(); 
         
         const modalHtml = `
             <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center hidden z-50 transition-opacity duration-300">
                 <div class="bg-white w-full sm:max-w-md sm:rounded-lg rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 border-b border-gray-100">
                         <button id="modal-back-btn" class="text-gray-400 hover:text-gray-800 p-2 hidden">⬅️ Atrás</button>
-                        
-                        <div class="flex items-center gap-2">
-                            <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
-                            <button id="vacation-toggle-btn" class="p-1.5 rounded-full transition-colors flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100" title="Modo Vacaciones">✈️</button>
-                        </div>
-
+                        <h3 id="modal-title" class="text-lg font-bold text-gray-800">Nuevo Gasto</h3>
                         <button id="modal-close-x" class="text-gray-400 hover:text-gray-800 p-2 text-xl font-bold">&times;</button>
                     </div>
                     <div id="modal-content" class="p-4 overflow-y-auto"></div>
@@ -1925,50 +1926,15 @@ function openModal(category = null, defaultDate = null) {
         $('#modal-close-x').addEventListener('click', closeModal);
         $('#modal-back-btn').addEventListener('click', () => {
             triggerHaptic('light');
-            if (modalState.step === 2 && !isVacationMode) renderStep1();
-        });
-
-        // 🌴 Listener del botón de Vacaciones
-        $('#vacation-toggle-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            triggerHaptic('medium');
-            isVacationMode = !isVacationMode; // Cambiamos el estado
-            
-            const btn = $('#vacation-toggle-btn');
-            if (isVacationMode) {
-                // Modo ON: Azul y saltamos directo a la pantalla de importe
-                btn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-blue-100 text-blue-600 scale-110 shadow-sm border border-blue-200';
-                modalState.category = 'Viajes';
-                renderStep2(); 
-            } else {
-                // Modo OFF: Gris y volvemos a mostrar todas las categorías
-                btn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100 scale-100';
-                modalState.category = null;
-                renderStep1(); 
-            }
+            // Solo permitir volver al paso 1 si NO estamos editando
+            if (modalState.step === 2 && !modalState.editModeId) renderStep1(); 
         });
     }
 
     container.classList.remove('hidden');
     container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
 
-    // Mantenemos el estilo del botón si el modal se cerró y se vuelve a abrir en modo vacaciones
-    const vacBtn = $('#vacation-toggle-btn');
-    if (vacBtn) {
-        if (isVacationMode) {
-            vacBtn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-blue-100 text-blue-600 scale-110 shadow-sm border border-blue-200';
-        } else {
-            vacBtn.className = 'p-1.5 rounded-full transition-all flex items-center justify-center bg-gray-50 text-gray-400 hover:bg-gray-100 scale-100';
-        }
-    }
-
-    // Lógica de navegación inicial
-    if (category) {
-        modalState.category = category;
-        renderStep2();
-    } else if (isVacationMode) {
-        // Si el modo vacaciones está activo al abrir, forzamos Viajes
-        modalState.category = 'Viajes';
+    if (modalState.category) {
         renderStep2();
     } else {
         renderStep1();
@@ -2051,36 +2017,17 @@ function renderStep2() {
     modalState.step = 2;
     const emoji = CATEGORY_EMOJIS[modalState.category] || '💰';
     
-    if (isVacationMode) {
-        $('#modal-title').textContent = '✈️ Modo Viaje 🌴';
-        $('#modal-back-btn').classList.add('hidden');
+    if (modalState.editModeId) {
+        $('#modal-title').textContent = `✏️ Editar ${modalState.category}`;
+        $('#modal-back-btn').classList.add('hidden'); // Ocultamos el botón "Atrás" en edición
     } else {
-        $('#modal-title').textContent = modalState.isEdit ? '✏️ Editar Gasto' : `${emoji} ${modalState.category}`;
+        $('#modal-title').textContent = `${emoji} ${modalState.category}`;
         $('#modal-back-btn').classList.remove('hidden');
     }
 
-    // Opciones del selector de categorías
-    const categoryOptions = Object.keys(CATEGORY_EMOJIS).map(cat => {
-        return `<option value="${cat}" ${cat === modalState.category ? 'selected' : ''}>${CATEGORY_EMOJIS[cat]} ${cat}</option>`;
-    }).join('');
-
-    const formHtml = `
-        <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> 
-            
-            ${modalState.isEdit ? `
-            <div>
-                <label for="edit-categoria" class="block text-sm font-medium text-gray-700 mb-1">Cambiar Categoría</label>
-                <div class="relative">
-                    <select id="edit-categoria" class="block w-full pl-3 pr-10 py-3 text-base text-gray-900 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 font-medium appearance-none">
-                        ${categoryOptions}
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                        <span class="text-xs">▼</span>
-                    </div>
-                </div>
-            </div>` : ''}
-
-            ${(modalState.category === 'Super' && !modalState.isEdit) ? `
+    let extraFields = '';
+    if (modalState.category === 'Super') {
+        extraFields = `
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">¿Dónde?</label>
                 <div class="grid grid-cols-3 gap-2">
@@ -2088,74 +2035,55 @@ function renderStep2() {
                     <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Consum' ? 'bg-orange-100 border-orange-500 ring-2 ring-orange-500' : 'bg-white'}" data-super="Consum">Consum</button>
                     <button type="button" class="super-btn p-2 border rounded-lg text-sm font-medium ${modalState.subCategory === 'Otro' ? 'bg-gray-100 border-gray-500 ring-2 ring-gray-500' : 'bg-white'}" data-super="Otro">Otro</button>
                 </div>
-            </div>` : ''}
-            
+            </div>`;
+    }
+
+    // Datos pre-rellenados si estamos editando
+    const defaultMonto = modalState.editMonto !== null ? modalState.editMonto : '';
+    const defaultDetalle = modalState.editDetalle !== null ? modalState.editDetalle : '';
+    const btnText = modalState.editModeId ? 'Actualizar Gasto' : 'Guardar Gasto';
+
+    const formHtml = `
+        <form id="step2-form" class="space-y-5 animate-fade-in pb-40"> ${extraFields}
             <div>
                 <label for="monto" class="block text-sm font-medium text-gray-700 mb-1">¿Cuánto?</label>
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">€</span>
                     <input type="text" inputmode="decimal" id="monto" name="monto" required 
                         class="block w-full pl-8 pr-3 py-3 text-2xl font-bold text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                        placeholder="0.00" autocomplete="off">
+                        placeholder="0.00" autocomplete="off" value="${defaultMonto}">
                 </div>
             </div>
-
-            ${!modalState.isEdit ? `
             <div id="detalle-container">
                 <label for="detalle" class="block text-sm font-medium text-gray-700 mb-1">Detalle (Opcional)</label>
-                <input type="text" name="detalle" id="detalle" class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Ej: Cena, Regalo...">
-            </div>` : ''}
-
+                <input type="text" name="detalle" id="detalle" class="block w-full p-3 text-gray-900 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Ej: Cena, Regalo..." value="${defaultDetalle}">
+            </div>
             <div class="flex items-center pt-2">
                 <input type="checkbox" id="esCompartido" name="esCompartido" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                 <label for="esCompartido" class="ml-2 block text-sm text-gray-900">Gasto Compartido (50%)</label>
             </div>
             
             <button type="submit" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700 transition transform active:scale-95 mt-4 mb-10">
-                ${modalState.isEdit ? '💾 Guardar Cambios' : '🚀 Añadir Gasto'}
+                ${btnText}
             </button>
         </form>`;
 
     $('#modal-content').innerHTML = formHtml;
     
-    // Auto-foco
     setTimeout(() => { 
         const m = $('#monto'); 
-        if(m && !m.value) m.focus(); 
+        if(m) {
+            m.focus();
+            // Movemos el cursor al final si hay texto
+            if(m.value) m.setSelectionRange(m.value.length, m.value.length);
+        }
     }, 100);
-
-    // Si cambias la categoría editando, recargamos el form
-    const catSelect = $('#edit-categoria');
-    if (catSelect) {
-        catSelect.addEventListener('change', (e) => {
-            modalState.category = e.target.value;
-            const currentMonto = $('#monto').value;
-            const currentCheck = $('#esCompartido').checked;
-            
-            renderStep2(); 
-            
-            setTimeout(() => {
-                $('#monto').value = currentMonto;
-                $('#esCompartido').checked = currentCheck;
-            }, 50);
-        });
-    }
 
     $$('.super-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (typeof triggerHaptic === 'function') triggerHaptic('light');
+            triggerHaptic('light');
             modalState.subCategory = btn.dataset.super;
-            const currentMonto = $('#monto').value;
-            const currentDetalle = $('#detalle') ? $('#detalle').value : '';
-            const currentCheck = $('#esCompartido').checked;
-            
             renderStep2(); 
-            
-            setTimeout(() => {
-                $('#monto').value = currentMonto;
-                if ($('#detalle')) $('#detalle').value = currentDetalle;
-                $('#esCompartido').checked = currentCheck;
-            }, 50);
         });
     });
 
@@ -2165,66 +2093,89 @@ function renderStep2() {
 
 async function handleFormSubmit(e) {
     e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
     
-    // 1. Cerramos el formulario al instante para que no estorbe
-    closeModal();
-
-    // 2. 🚀 ENCENDEMOS TU PANTALLA DE CARGA NATIVA
-    showLoader(modalState.isEdit ? 'Guardando cambios...' : 'Procesando gasto...');
-
-    let amount = parseFloat($('#monto').value.replace(',', '.'));
-    
-    // Si editamos, cogemos el detalle de la memoria. Si es nuevo, lo cogemos del input.
-    let detail = modalState.isEdit ? modalState.detalle : ($('#detalle') ? $('#detalle').value.trim() : '');
-    const split50 = $('#esCompartido') ? $('#esCompartido').checked : false;
-
-    // Autocompletado del Super (Solo para nuevos gastos)
-    if (modalState.category === 'Super' && !detail && !modalState.isEdit) {
-        detail = modalState.subCategory || 'Supermercado';
+    let detalle = formData.get('detalle');
+    if (modalState.category === 'Super') {
+        if (modalState.subCategory === 'Otro') {
+             if(!detalle) detalle = 'Supermercado';
+        } else {
+             detalle = modalState.subCategory || 'Supermercado';
+        }
     }
 
-    // Lógica del 50%
-    if (split50) {
-        amount = amount / 2;
-        detail = detail ? `${detail} (Mitad)` : '(Mitad)';
-    }
-
-    const data = {
-        monto: amount,
-        detalle: detail || modalState.category,
-        categoria: modalState.category,
-        fecha: modalState.isEdit ? modalState.fecha : (modalState.defaultDate || new Date().toISOString().split('T')[0])
+    const data = { 
+        categoria: modalState.category, 
+        monto: parseFloat(formData.get('monto').replace(',', '.')), 
+        detalle: detalle, 
+        esCompartido: formData.get('esCompartido') === 'on' 
     };
 
+    if (!data.categoria) {
+        showToast('Error interno: Categoría no definida', 'error');
+        return;
+    }
+
+    // Si estamos editando, inyectamos el rowId al payload
+    if (modalState.editModeId) {
+        data.rowId = modalState.editModeId;
+    }
+
+    if (modalState.defaultDate) data.fecha = modalState.defaultDate;
+
+    closeModal();
+    showLoader(modalState.editModeId ? 'Actualizando gasto...' : 'Procesando gasto...');
+
     try {
-        if (modalState.isEdit) {
-            // --- SI ESTAMOS EDITANDO ---
-            data.rowId = modalState.editId;
-            const result = await apiService.call('updateExpense', data);
-            
-            hideLoader(); // 🛑 APAGAMOS EL LOADER
-            
-            if (result.status === 'success') {
-                showToast('Gasto actualizado');
-                modalState.isEdit = false; // Limpiamos estado
-                await loadInitialDataWithCache(); // Recargamos la interfaz
-            } else throw new Error(result.message);
-            
-        } else {
-            // --- SI ES UN GASTO NUEVO ---
-            const result = await apiService.call('addExpense', data);
-            
-            hideLoader(); // 🛑 APAGAMOS EL LOADER
-            
-            if (result.status === 'success') {
-                // 🌟 LLAMAMOS A LA TARJETA PREMIUM 🌟
-                window.showSuccessCard(result.data.receipt, result.data.budgetInfo);
-                await loadInitialDataWithCache(); // Recargamos para que se actualice la lista de fondo
-            } else throw new Error(result.message);
+        // Determinamos la acción a llamar en backend
+        let action = 'addExpense';
+        if (modalState.editModeId) {
+            action = 'updateExpense';
+        } else if (modalState.defaultDate) {
+            action = 'addForgottenExpense';
         }
-    } catch (error) {
-        hideLoader(); // 🛑 APAGAMOS EL LOADER TAMBIÉN SI HAY ERROR
-        showToast('Error al guardar', 'error');
+
+        const result = await apiService.call(action, data);
+
+        triggerHaptic('success'); 
+
+        // Solo lanzamos el Premium Toast visual si es un gasto nuevo (addExpense)
+        if (action === 'addExpense' && result.data.receipt) {
+            refreshStateAndUI(); 
+            
+            const comparativa = result.data.comparativa; 
+            let comparisonData = null;
+
+            if (comparativa) {
+                const gastoMesPasado = comparativa.gastoPasado;
+                const gastoActual = result.data.budgetInfo.gastado;
+                const diff = gastoActual - gastoMesPasado;
+                
+                comparisonData = {
+                    mesPasado: comparativa.mesPasado,
+                    gastoPasado: gastoMesPasado,
+                    diferencia: diff
+                };
+            }
+
+            showPremiumToast(
+                result.data.receipt, 
+                result.data.budgetInfo, 
+                comparisonData
+            );
+
+        } else {
+            // Si es un editado o un olvidado, refrescamos y mostramos un simple Toast
+            await refreshStateAndUI();
+            const msg = modalState.editModeId ? 'Gasto actualizado con éxito.' : 'Gasto olvidado añadido.';
+            showToast(msg, 'success');
+        }
+    } catch (error) { 
+        triggerHaptic('warning'); 
+        showToast(error.message, 'error'); 
+    } finally { 
+        hideLoader(); 
     }
 }
 
@@ -2241,40 +2192,13 @@ function updateState(data) {
     if (data.aiAdvice) state.aiAdvice = data.aiAdvice;
 }
 
-window.handleEditClick = function(e) {
-    if (typeof triggerHaptic === 'function') triggerHaptic('medium');
-    const btn = e.target.closest('button');
-    const gasto = JSON.parse(btn.dataset.gasto);
-
-    // 🕵️‍♂️ EL BLINDAJE: Buscamos el ID sin importar cómo venga escrito en la base de datos
-    const idCorrecto = gasto.rowId || gasto.rowid || gasto.id;
-
-    // 1. Preparamos el estado de la app
-    modalState = {
-        step: 2,
-        category: gasto.categoria,
-        isEdit: true,
-        editId: idCorrecto, // <-- AHORA NUNCA SERÁ 0
-        fecha: gasto.fecha,
-        detalle: gasto.detalle 
-    };
-
-    // 2. Abrimos el modal contenedor visualmente
-    let container = $('#expense-modal');
-    if (container) {
-        container.classList.remove('hidden');
-        container.querySelector('.bg-white').classList.add('animate-slide-up-modal');
-    }
-
-    // 3. Pintamos el diseño
-    renderStep2();
-
-    // 4. Rellenamos el importe mágicamente
-    setTimeout(() => {
-        const montoInput = $('#monto');
-        if (montoInput) montoInput.value = gasto.monto;
-    }, 50);
-};
+async function handleEditClick(e) {
+    triggerHaptic('medium');
+    const gasto = JSON.parse(e.target.closest('[data-gasto]').dataset.gasto);
+    
+    // Abrimos el modal pasando null para categoría y fecha, pero enviando el objeto gasto completo
+    openModal(null, null, gasto);
+}
 
 // main.js - Reemplaza handleDeleteClick
 async function handleDeleteClick(e) {
