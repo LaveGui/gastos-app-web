@@ -291,22 +291,6 @@ function setupGlobalEventListeners() {
     });
 
     // Lógica Pull-to-Refresh (sin cambios, solo añadimos la vibración al activarse)
-    let touchStartY = 0;
-    const appContent = $('#app-content');
-    appContent.addEventListener('touchstart', e => {
-        if (appContent.scrollTop === 0) touchStartY = e.touches[0].clientY;
-        else touchStartY = 0;
-    }, { passive: true });
-
-    appContent.addEventListener('touchmove', e => {
-        const touchEndY = e.touches[0].clientY;
-        if (touchStartY > 0 && touchEndY - touchStartY > 100) {
-            touchStartY = 0;
-            triggerHaptic('medium'); // ¡Vibra cuando detecta que vas a refrescar!
-            showLoader('Actualizando...');
-            refreshStateAndUI().then(() => hideLoader());
-        }
-    }, { passive: true });
 }
 
 // --- VISTAS ---
