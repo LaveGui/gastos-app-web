@@ -292,7 +292,6 @@ function setupGlobalEventListeners() {
 
     // Lógica Pull-to-Refresh (sin cambios, solo añadimos la vibración al activarse)
 }
-nfp_jvcXkSHhY5MigjpmtLJNnTtK9Ta5DQGr4726
 // --- VISTAS ---
 
 function renderViewShell(title, content) {
