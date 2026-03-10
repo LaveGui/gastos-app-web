@@ -2617,11 +2617,15 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
     document.getElementById('btn-success-splitwise').addEventListener('click', async () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('success');
         
-        // 1. Copiamos el número exacto al portapapeles del móvil
+        // Calculamos el monto al 100% si el gasto es compartido
+        // (Si receipt.esCompartido es true, multiplicamos por 2, si no, dejamos el original)
+        const montoCompleto = receipt.esCompartido ? (receipt.monto * 2) : receipt.monto;
+
+        // 1. Copiamos el número exacto (al 100%) al portapapeles del móvil
         try {
-            await navigator.clipboard.writeText(receipt.monto.toString());
-            // Si tienes la función showToast, mostramos un pequeño aviso
-            if (typeof showToast === 'function') showToast('Monto copiado: ' + receipt.monto, 'success');
+            await navigator.clipboard.writeText(montoCompleto.toString());
+            // Mostramos un pequeño aviso confirmando la cantidad exacta copiada
+            if (typeof showToast === 'function') showToast('Monto 100% copiado: ' + montoCompleto + '€', 'success');
         } catch (err) {
             console.error('Error al copiar al portapapeles: ', err);
         }
