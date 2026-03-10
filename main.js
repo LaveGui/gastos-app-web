@@ -292,7 +292,7 @@ function setupGlobalEventListeners() {
 
     // Lógica Pull-to-Refresh (sin cambios, solo añadimos la vibración al activarse)
 }
-
+nfp_jvcXkSHhY5MigjpmtLJNnTtK9Ta5DQGr4726
 // --- VISTAS ---
 
 function renderViewShell(title, content) {
@@ -2153,8 +2153,7 @@ async function handleFormSubmit(e) {
     } catch (error) { 
         triggerHaptic('warning'); 
         showToast(error.message, 'error'); 
-    } finally { 
-        hideLoader(); 
+    } finally {         hideLoader(); 
     }
 }
 
@@ -2493,7 +2492,7 @@ function triggerHaptic(type = 'light') {
     navigator.vibrate(patterns[type] || 10);
 }
 
-// --- TARJETA DE ÉXITO PREMIUM ---
+
 window.showSuccessCard = function(receipt, budgetInfo = null) {
     // 1. Limpiamos si hay alguna tarjeta anterior abierta
     const existing = document.getElementById('success-overlay');
@@ -2503,13 +2502,12 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
     const montoStr = parseFloat(receipt.monto).toFixed(2) + '€';
     const detalleStr = receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : receipt.categoria;
 
-    // 2. Lógica de la barra de progreso (El Contexto) CON PORCENTAJE
+    // 2. Lógica de la barra de progreso CON PORCENTAJE
     let budgetHtml = '';
     if (budgetInfo && budgetInfo.presupuesto > 0) {
         const porcentajeReal = budgetInfo.porcentaje; 
-        const porcentajeVisual = Math.min(porcentajeReal, 100); // Para que la barra no se salga del 100%
+        const porcentajeVisual = Math.min(porcentajeReal, 100); 
         
-        // Colores dinámicos para la barra y el texto del porcentaje
         const colorClass = porcentajeReal >= 100 ? 'bg-red-500' : (porcentajeReal >= 80 ? 'bg-orange-400' : 'bg-green-500');
         const textClass = porcentajeReal >= 100 ? 'text-red-600 bg-red-50' : (porcentajeReal >= 80 ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50');
         
@@ -2529,7 +2527,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
         `;
     }
 
-    // 3. El Diseño Visual Espectacular
+    // 3. El Diseño Visual Espectacular (Añadido botón Splitwise)
     const html = `
         <div id="success-overlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
             <div class="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl transform scale-95 opacity-0 transition-all duration-300" id="success-card">
@@ -2554,6 +2552,9 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
                             <span id="success-timer" class="text-xs text-gray-400 font-normal bg-gray-800 px-3 py-1 rounded-full">30s</span>
                         </button>
                         
+                        <button id="btn-success-splitwise" class="w-full bg-[#5bc5a7] text-white font-bold py-3.5 rounded-2xl shadow-sm hover:bg-[#4bb597] active:scale-95 transition-all flex items-center justify-center gap-2">
+                            <span class="text-xl">➗</span> Copiar Monto y Abrir Splitwise
+                        </button>
                         <div class="grid grid-cols-2 gap-3 pt-2">
                             <button id="btn-success-edit" class="w-full bg-blue-50 text-blue-600 font-bold py-3.5 rounded-2xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
                                 ✏️ Editar
@@ -2575,7 +2576,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
     const timerText = document.getElementById('success-timer');
     const progressBar = document.getElementById('budget-progress-bar');
 
-    // 4. Animación de entrada suave
+    // 4. Animación de entrada
     setTimeout(() => {
         overlay.classList.remove('opacity-0');
         card.classList.remove('scale-95', 'opacity-0');
@@ -2613,9 +2614,29 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
         stopTimer(); close();
     });
 
+    // 👇 LA MAGIA DE SPLITWISE 👇
+    document.getElementById('btn-success-splitwise').addEventListener('click', async () => {
+        if (typeof triggerHaptic === 'function') triggerHaptic('success');
+        
+        // 1. Copiamos el número exacto al portapapeles del móvil
+        try {
+            await navigator.clipboard.writeText(receipt.monto.toString());
+            // Si tienes la función showToast, mostramos un pequeño aviso
+            if (typeof showToast === 'function') showToast('Monto copiado: ' + receipt.monto, 'success');
+        } catch (err) {
+            console.error('Error al copiar al portapapeles: ', err);
+        }
+
+        // 2. Ejecutamos el Deep Link a Splitwise
+        window.location.href = 'splitwise://';
+        
+        // 3. Cerramos nuestra tarjeta
+        stopTimer(); 
+        close();
+    });
+
     document.getElementById('btn-success-edit').addEventListener('click', () => {
         stopTimer(); close();
-        // Le pasamos el gasto directamente a la función de edición
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
         setTimeout(() => window.handleEditClick({ target: { closest: () => dummyBtn } }), 200);
@@ -2623,11 +2644,9 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
 
     document.getElementById('btn-success-delete').addEventListener('click', () => {
         stopTimer(); close();
-        // Le pasamos el gasto a la función de borrar
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
         dummyBtn.classList.add('delete-btn'); 
         setTimeout(() => window.handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
     });
 };
-
