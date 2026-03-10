@@ -2095,6 +2095,7 @@ async function handleFormSubmit(e) {
 
     const data = { 
         categoria: modalState.category, 
+        // Este es el monto original que escribes en la pantalla (ej: 40)
         monto: parseFloat(formData.get('monto').replace(',', '.')), 
         detalle: detalle, 
         esCompartido: formData.get('esCompartido') === 'on' 
@@ -2105,7 +2106,6 @@ async function handleFormSubmit(e) {
         return;
     }
 
-    // Si estamos editando, inyectamos el rowId al payload
     if (modalState.editModeId) {
         data.rowId = modalState.editModeId;
     }
@@ -2116,7 +2116,6 @@ async function handleFormSubmit(e) {
     showLoader(modalState.editModeId ? 'Actualizando gasto...' : 'Procesando gasto...');
 
     try {
-        // Determinamos la acción a llamar en backend
         let action = 'addExpense';
         if (modalState.editModeId) {
             action = 'updateExpense';
@@ -2128,23 +2127,20 @@ async function handleFormSubmit(e) {
 
         triggerHaptic('success'); 
 
-        // Solo lanzamos tu Modal Premium visual si es un gasto nuevo (addExpense)
         if (action === 'addExpense' && result.data.receipt) {
             refreshStateAndUI(); 
             
-            // ✅ EL FIX DEFINITIVO: Llamamos a tu función exacta pasando los 2 parámetros que espera
             if (typeof window.showSuccessCard === 'function') {
                 window.showSuccessCard(
                     result.data.receipt, 
-                    result.data.budgetInfo
+                    result.data.budgetInfo,
+                    data.monto // ✅ EL FIX: Le pasamos el monto original intacto a la tarjeta
                 );
             } else {
-                // Fallback de seguridad por si falla la carga
                 showToast('Gasto guardado con éxito', 'success');
             }
 
         } else {
-            // Si es un editado o un olvidado, refrescamos y mostramos un simple Toast
             await refreshStateAndUI();
             const msg = modalState.editModeId ? 'Gasto actualizado con éxito.' : 'Gasto olvidado añadido.';
             showToast(msg, 'success');
@@ -2152,7 +2148,8 @@ async function handleFormSubmit(e) {
     } catch (error) { 
         triggerHaptic('warning'); 
         showToast(error.message, 'error'); 
-    } finally {         hideLoader(); 
+    } finally { 
+        hideLoader(); 
     }
 }
 
@@ -2492,7 +2489,8 @@ function triggerHaptic(type = 'light') {
 }
 
 
-window.showSuccessCard = function(receipt, budgetInfo = null) {
+// Añadimos el tercer parámetro: montoOriginal
+window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = null) {
     // 1. Limpiamos si hay alguna tarjeta anterior abierta
     const existing = document.getElementById('success-overlay');
     if (existing) existing.remove();
@@ -2501,7 +2499,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
     const montoStr = parseFloat(receipt.monto).toFixed(2) + '€';
     const detalleStr = receipt.detalle && receipt.detalle !== receipt.categoria ? receipt.detalle : receipt.categoria;
 
-    // 2. Lógica de la barra de progreso CON PORCENTAJE
+    // 2. Lógica de la barra de progreso
     let budgetHtml = '';
     if (budgetInfo && budgetInfo.presupuesto > 0) {
         const porcentajeReal = budgetInfo.porcentaje; 
@@ -2526,7 +2524,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
         `;
     }
 
-    // 3. El Diseño Visual Espectacular (Añadido botón Splitwise)
+    // 3. El Diseño Visual Espectacular
     const html = `
         <div id="success-overlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
             <div class="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl transform scale-95 opacity-0 transition-all duration-300" id="success-card">
@@ -2554,6 +2552,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
                         <button id="btn-success-splitwise" class="w-full bg-[#5bc5a7] text-white font-bold py-3.5 rounded-2xl shadow-sm hover:bg-[#4bb597] active:scale-95 transition-all flex items-center justify-center gap-2">
                             <span class="text-xl">➗</span> Copiar Monto y Abrir Splitwise
                         </button>
+
                         <div class="grid grid-cols-2 gap-3 pt-2">
                             <button id="btn-success-edit" class="w-full bg-blue-50 text-blue-600 font-bold py-3.5 rounded-2xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
                                 ✏️ Editar
@@ -2584,7 +2583,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
 
     if (typeof triggerHaptic === 'function') triggerHaptic('success');
 
-    // 5. Temporizador de 30 segundos
+    // 5. Temporizador
     let timeLeft = 30;
     
     const close = () => {
@@ -2604,7 +2603,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
 
     const stopTimer = () => clearInterval(interval);
 
-    // 6. Funciones de los botones
+    // 6. Eventos
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) { stopTimer(); close(); }
     });
@@ -2613,18 +2612,16 @@ window.showSuccessCard = function(receipt, budgetInfo = null) {
         stopTimer(); close();
     });
 
-    // 👇 LA MAGIA DE SPLITWISE 👇
+    // 👇 LA LÓGICA CORREGIDA DE SPLITWISE 👇
     document.getElementById('btn-success-splitwise').addEventListener('click', async () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('success');
         
-        // Calculamos el monto al 100% si el gasto es compartido
-        // (Si receipt.esCompartido es true, multiplicamos por 2, si no, dejamos el original)
-        const montoCompleto = receipt.esCompartido ? (receipt.monto * 2) : receipt.monto;
+        // Usamos el monto original que escribiste. Si falla, usamos el del recibo.
+        const montoCompleto = montoOriginal !== null ? montoOriginal : receipt.monto;
 
-        // 1. Copiamos el número exacto (al 100%) al portapapeles del móvil
+        // 1. Copiamos el número exacto al portapapeles del móvil
         try {
             await navigator.clipboard.writeText(montoCompleto.toString());
-            // Mostramos un pequeño aviso confirmando la cantidad exacta copiada
             if (typeof showToast === 'function') showToast('Monto 100% copiado: ' + montoCompleto + '€', 'success');
         } catch (err) {
             console.error('Error al copiar al portapapeles: ', err);
