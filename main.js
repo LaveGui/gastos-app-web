@@ -1,6 +1,6 @@
     // main.js - v5.1 - LIMPIO Y CONSOLIDADO
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbyjaJL8AXKQKsY3VzoFGYEjo9XQX8DhCI6gmMZnQXJ_GbhrWRnoLK-0O2RaAp3W3VYUXg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxJHW9DTWeUBEgacgqK_r-lVIYAqIDjjyaiFLLo6rzwV4lNh-i2Ilm0FwGXTZKCYKaqCQ/exec';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
