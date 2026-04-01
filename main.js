@@ -301,9 +301,7 @@ function renderViewShell(title, content) {
 // main.js - Reemplaza renderDashboardView COMPLETA
 
 // main.js - Reemplaza renderDashboardView COMPLETA
-
 function renderDashboardView() {
-    // 1. Datos iniciales
     const totalData = state.totalSummary || { llevagastadoenelmes: 0, presupuesto: 0 };
     const formatOptions = { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 };
     const totalPercent = totalData.presupuesto ? (totalData.llevagastadoenelmes / totalData.presupuesto) * 100 : 0;
@@ -311,7 +309,6 @@ function renderDashboardView() {
     const today = new Date();
     const currentDay = today.getDate();
     
-    // 2. Lógica de Alertas
     let alertsHTML = '';
 
     const isMortgagePaid = state.monthlyExpenses.some(g => normalizeString(g.categoria).includes('hipoteca'));
@@ -338,10 +335,6 @@ function renderDashboardView() {
             </div>`;
     }
 
-    // --- TEXTO DE GEMINI ---
-    const geminiText = state.aiAdvice || "Calculando tus finanzas...";
-
-    // 3. Render HTML
     const dashboardHTML = ` 
         <div id="alerts-container">${alertsHTML}</div>
         
@@ -352,7 +345,7 @@ function renderDashboardView() {
             <button id="refresh-dashboard" class="bg-blue-500 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-600 shadow-sm">🔄 Refrescar</button>
         </div>
 
-        <div class="p-4 bg-white rounded-lg shadow mb-4">
+        <div class="p-4 bg-white rounded-lg shadow mb-6">
             <p class="text-lg font-semibold text-gray-600">Gasto total del mes</p>
             <div class="flex items-baseline space-x-4">
                 <div class="text-4xl font-bold text-gray-900">${(totalData.llevagastadoenelmes || 0).toLocaleString('es-ES', formatOptions)}</div>
@@ -361,19 +354,6 @@ function renderDashboardView() {
             <p class="mt-2 font-semibold ${getBudgetColor(totalPercent)}">${totalPercent.toFixed(1)}% del presupuesto total</p>
         </div>
 
-        <div class="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[2px] rounded-3xl shadow-sm mb-6 animate-fade-in transform transition hover:scale-[1.01]">
-            <div class="bg-white rounded-[22px] p-5">
-                <div class="flex items-center gap-3 mb-2">
-                    <div class="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center text-lg shadow-sm">
-                        ✨
-                    </div>
-                    <h3 class="font-bold text-gray-800 text-sm tracking-wide">Gemini Insights</h3>
-                </div>
-                <p class="text-sm text-gray-600 font-medium italic leading-relaxed">
-                    ${geminiText}
-                </p>
-            </div>
-        </div>
         <div id="distribution-area" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="budget-list" class="space-y-3"></div>
             <div id="distribution-chart-card" class="bg-white rounded-lg shadow p-4">
@@ -385,8 +365,6 @@ function renderDashboardView() {
 
     renderViewShell('Dashboard', dashboardHTML);
 
-    // --- 4. LISTENERS ---
-
     const quickMortgageBtn = document.getElementById('quick-add-mortgage');
     if (quickMortgageBtn) {
         quickMortgageBtn.addEventListener('click', () => {
@@ -396,7 +374,6 @@ function renderDashboardView() {
                 const buttons = document.querySelectorAll('.category-btn');
                 const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category).includes('hipoteca'));
                 if (btn) btn.click();
-                
                 const montoInput = document.getElementById('monto');
                 if(montoInput) montoInput.value = "734.25"; 
             }, 50);
@@ -411,7 +388,6 @@ function renderDashboardView() {
             setTimeout(() => {
                 const buttons = document.querySelectorAll('.category-btn');
                 const btn = Array.from(buttons).find(b => normalizeString(b.dataset.category) === 'comunidad');
-                
                 if (btn) {
                     btn.click();
                     const comCategory = state.categories.find(c => normalizeString(c.detalle) === 'comunidad');
