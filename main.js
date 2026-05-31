@@ -2090,7 +2090,6 @@ async function handleFormSubmit(e) {
 
     closeModal();
     showLoader(modalState.editModeId ? 'Actualizando gasto...' : 'Procesando gasto...');
-
     try {
         let action = 'addExpense';
         if (modalState.editModeId) {
@@ -2103,18 +2102,29 @@ async function handleFormSubmit(e) {
 
         triggerHaptic('success'); 
 
-        if (action === 'addExpense' && result.data.receipt) {
+        if (action === 'addExpense') {
+            // Extraemos el objeto receipt de forma tolerante a la estructura de tu apiService
+            const receiptData = result.data?.receipt || result.receipt || (result.data ? result.data : null);
+            const budgetData = result.data?.budgetInfo || result.budgetInfo;
 
-            const serverRowId = result.data.rowId;
+            // 🔍 CAPTURA MULTI-CAPA DEL ROW ID
+            // Buscamos el ID en el receipt, en la raíz del result, o donde sea que venga
+            const serverRowId = receiptData?.rowId || result.rowId || result.data?.rowId || (result.data?.data?.rowId);
+
+            // 📝 LOGS DE DIAGNÓSTICO (Míralos en la consola del navegador pulsando F12)
+            console.log("=== CONTROL DE FLUJO API ===");
+            console.log("1. Objeto de respuesta crudo:", result);
+            console.log("2. Datos de recibo extraídos:", receiptData);
+            console.log("3. ID de fila definitivo detectado:", serverRowId);
 
             refreshStateAndUI(); 
             
-            if (typeof window.showSuccessCard === 'function') {
+            if (typeof window.showSuccessCard === 'function' && receiptData) {
                 window.showSuccessCard(
-                    result.data.receipt, 
-                    result.data.budgetInfo,
-                    data.monto,
-                    serverRowId // ✅ EL FIX: Le pasamos el monto original intacto a la tarjeta
+                    receiptData, 
+                    budgetData,
+                    data.monto, 
+                    serverRowId // Pasamos el ID verificado a la tarjeta de éxito
                 );
             } else {
                 showToast('Gasto guardado con éxito', 'success');
@@ -2131,6 +2141,7 @@ async function handleFormSubmit(e) {
     } finally { 
         hideLoader(); 
     }
+      
 }
 
 function updateState(data) {
