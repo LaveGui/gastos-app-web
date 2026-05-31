@@ -2104,13 +2104,17 @@ async function handleFormSubmit(e) {
         triggerHaptic('success'); 
 
         if (action === 'addExpense' && result.data.receipt) {
+
+            const serverRowId = result.data.rowId;
+
             refreshStateAndUI(); 
             
             if (typeof window.showSuccessCard === 'function') {
                 window.showSuccessCard(
                     result.data.receipt, 
                     result.data.budgetInfo,
-                    data.monto // ✅ EL FIX: Le pasamos el monto original intacto a la tarjeta
+                    data.monto,
+                    serverRowId // ✅ EL FIX: Le pasamos el monto original intacto a la tarjeta
                 );
             } else {
                 showToast('Gasto guardado con éxito', 'success');
@@ -2465,8 +2469,7 @@ function triggerHaptic(type = 'light') {
 }
 
 
-// Añadimos el tercer parámetro: montoOriginal
-window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = null) {
+window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = null, rowId) {
     // 1. Limpiamos si hay alguna tarjeta anterior abierta
     const existing = document.getElementById('success-overlay');
     if (existing) existing.remove();
@@ -2579,7 +2582,7 @@ window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = nu
 
     const stopTimer = () => clearInterval(interval);
 
-    // 6. Eventos
+    // 6. Configuración limpia de Eventos (Sin duplicados)
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) { stopTimer(); close(); }
     });
@@ -2588,14 +2591,12 @@ window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = nu
         stopTimer(); close();
     });
 
-    // 👇 LA LÓGICA CORREGIDA DE SPLITWISE 👇
+    // LÓGICA DE SPLITWISE 
     document.getElementById('btn-success-splitwise').addEventListener('click', async () => {
         if (typeof triggerHaptic === 'function') triggerHaptic('success');
         
-        // Usamos el monto original que escribiste. Si falla, usamos el del recibo.
         const montoCompleto = montoOriginal !== null ? montoOriginal : receipt.monto;
 
-        // 1. Copiamos el número exacto al portapapeles del móvil
         try {
             await navigator.clipboard.writeText(montoCompleto.toString());
             if (typeof showToast === 'function') showToast('Monto 100% copiado: ' + montoCompleto + '€', 'success');
@@ -2603,26 +2604,33 @@ window.showSuccessCard = function(receipt, budgetInfo = null, montoOriginal = nu
             console.error('Error al copiar al portapapeles: ', err);
         }
 
-        // 2. Ejecutamos el Deep Link a Splitwise
         window.location.href = 'splitwise://';
-        
-        // 3. Cerramos nuestra tarjeta
         stopTimer(); 
         close();
     });
 
+    // LÓGICA DE EDICIÓN BLINDADA
     document.getElementById('btn-success-edit').addEventListener('click', () => {
         stopTimer(); close();
+        if (rowId) receipt.rowId = rowId; // Hidratamos también para el editor mas seguro
+        
         const dummyBtn = document.createElement('button');
         dummyBtn.dataset.gasto = JSON.stringify(receipt);
         setTimeout(() => window.handleEditClick({ target: { closest: () => dummyBtn } }), 200);
     });
 
+    // LÓGICA DE ELIMINACIÓN BLINDADA (Única y Limpia)
     document.getElementById('btn-success-delete').addEventListener('click', () => {
-        stopTimer(); close();
+        stopTimer(); 
+        close();
+
+        // Inyectamos el rowId de la base de datos directo al paquete
+        if (rowId) receipt.rowId = rowId;
+
         const dummyBtn = document.createElement('button');
-        dummyBtn.dataset.gasto = JSON.stringify(receipt);
+        dummyBtn.dataset.gasto = JSON.stringify(receipt); 
         dummyBtn.classList.add('delete-btn'); 
+        
         setTimeout(() => window.handleDeleteClick({ target: { closest: () => dummyBtn } }), 200);
     });
 };
